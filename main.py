@@ -2,7 +2,7 @@
 Options Volume Signal — Main Entry Point
 
 Fetches options data for S&P 500 IT + Nasdaq-100 stocks, identifies the top-3
-highest-volume contracts per expiry horizon (1d/3d/7d/14d/30d), computes
+highest-volume contracts per expiry horizon (7d/30d/45d/60d/90d/180d/1y), computes
 buy/sell signals and forecasted % moves, and exports a color-coded Excel file.
 
 Usage:
@@ -34,6 +34,7 @@ from exporter_html import write_html
 GREEN_FILL   = PatternFill("solid", fgColor="C6EFCE")
 RED_FILL     = PatternFill("solid", fgColor="FFC7CE")
 YELLOW_FILL  = PatternFill("solid", fgColor="FFEB9C")
+ORANGE_FILL  = PatternFill("solid", fgColor="FCE4D6")
 BLUE_FILL    = PatternFill("solid", fgColor="BDD7EE")
 GREY_FILL    = PatternFill("solid", fgColor="D9D9D9")
 HEADER_FILL  = PatternFill("solid", fgColor="1F4E79")
@@ -52,7 +53,7 @@ LEFT         = Alignment(horizontal="left", vertical="center")
 THIN = Side(style="thin", color="BFBFBF")
 THIN_BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
-HORIZONS_ORDER = list(HORIZONS.keys())  # ["1d","3d","7d","14d","30d"]
+HORIZONS_ORDER = list(HORIZONS.keys())  # ["7d","30d","45d","60d","90d","180d","1y"]
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +120,9 @@ def write_detail_sheet(ws, rows: list[dict]):
                 elif val == "SELL":
                     cell.fill = RED_FILL
                     cell.font = Font(color="9C0006", bold=True)
+                elif val == "HEDGE":
+                    cell.fill = ORANGE_FILL
+                    cell.font = Font(color="833C00", bold=True)
             elif col_name == "Forecast %":
                 if val is not None:
                     cell.number_format = '0.00"%"'
@@ -182,11 +186,13 @@ def write_summary_sheet(ws, analyzed: list[dict]):
     ws.merge_cells(start_row=1, start_column=2, end_row=2, end_column=2)
 
     horizon_label_map = {
-        "1d":  "1 Day",
-        "3d":  "3 Days",
-        "7d":  "7 Days",
-        "14d": "2 Weeks",
-        "30d": "1 Month",
+        "7d":   "7 Days",
+        "30d":  "1 Month",
+        "45d":  "45 Days",
+        "60d":  "60 Days",
+        "90d":  "90 Days",
+        "180d": "6 Months",
+        "1y":   "1 Year",
     }
 
     for h_idx, horizon in enumerate(HORIZONS_ORDER):
@@ -273,6 +279,9 @@ def write_summary_sheet(ws, analyzed: list[dict]):
                 elif signal == "SELL":
                     c.fill = RED_FILL
                     c.font = Font(color="9C0006", bold=True)
+                elif signal == "HEDGE":
+                    c.fill = ORANGE_FILL
+                    c.font = Font(color="833C00", bold=True)
                 else:
                     c.fill = GREY_FILL
 
@@ -325,11 +334,16 @@ def main():
     args = parse_args()
 
     tickers = args.tickers if args.tickers else get_universe()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    output_path = Path(args.output) if args.output else Path(f"options_signals_{timestamp}.xlsx")
+    now = datetime.now()
+    timestamp = now.strftime("%Y%m%d_%H%M")
+    display_timestamp = now.strftime("%B %-d, %Y at %-I:%M %p")
+
+    reports_dir = Path("reports")
+    reports_dir.mkdir(exist_ok=True)
+    output_path = Path(args.output) if args.output else reports_dir / f"options_signals_{timestamp}.xlsx"
 
     print(f"Options Volume Signal Report")
-    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"Date: {display_timestamp}")
     print(f"Tickers: {len(tickers)}")
     print(f"Output:  {output_path}\n")
 
@@ -362,17 +376,19 @@ def main():
     print(f"Excel report: {output_path.resolve()}")
 
     html_path = output_path.with_suffix(".html")
-    write_html(analyzed, html_path, timestamp)
+    write_html(analyzed, html_path, display_timestamp)
     print(f"\nDone! Open the HTML file in your browser to explore interactively.")
 
     # Quick stats
-    total_buy  = sum(1 for r in detail_rows if r["Signal"] == "BUY")
-    total_sell = sum(1 for r in detail_rows if r["Signal"] == "SELL")
-    total_na   = sum(1 for r in detail_rows if r["Signal"] is None)
+    total_buy   = sum(1 for r in detail_rows if r["Signal"] == "BUY")
+    total_sell  = sum(1 for r in detail_rows if r["Signal"] == "SELL")
+    total_hedge = sum(1 for r in detail_rows if r["Signal"] == "HEDGE")
+    total_na    = sum(1 for r in detail_rows if r["Signal"] is None)
     print(f"\nSignal breakdown across all tickers/horizons/ranks:")
-    print(f"  BUY:  {total_buy}")
-    print(f"  SELL: {total_sell}")
-    print(f"  N/A:  {total_na}")
+    print(f"  BUY:   {total_buy}")
+    print(f"  SELL:  {total_sell}")
+    print(f"  HEDGE: {total_hedge}  (ITM contracts — likely institutional hedges, not directional bets)")
+    print(f"  N/A:   {total_na}")
 
 
 if __name__ == "__main__":

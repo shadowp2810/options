@@ -9,7 +9,15 @@ from pathlib import Path
 from analyzer import HORIZONS, TOP_N
 
 HORIZONS_ORDER = list(HORIZONS.keys())
-HORIZON_LABELS = {"1d": "1 Day", "3d": "3 Days", "7d": "7 Days", "14d": "2 Weeks", "30d": "1 Month"}
+HORIZON_LABELS = {
+    "7d":   "7 Days",
+    "30d":  "1 Month",
+    "45d":  "45 Days",
+    "60d":  "60 Days",
+    "90d":  "90 Days",
+    "180d": "6 Months",
+    "1y":   "1 Year",
+}
 
 
 def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
@@ -39,6 +47,9 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
     --red-dim: #991b1b;
     --red-bg: #2d0b0b;
     --yellow: #f59e0b;
+  --orange: #f97316;
+  --orange-dim: #9a3412;
+  --orange-bg: #2c1206;
     --text: #e2e8f0;
     --text-muted: #94a3b8;
     --text-dim: #64748b;
@@ -113,6 +124,7 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
   .pill.active {{ background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }}
   .pill.active.buy {{ background: var(--green); border-color: var(--green); }}
   .pill.active.sell {{ background: var(--red); border-color: var(--red); }}
+  .pill.active.hedge {{ background: var(--orange); border-color: var(--orange); }}
   .search-input {{
     padding: 6px 12px;
     border-radius: 20px;
@@ -221,6 +233,7 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
   }}
   .badge.buy {{ background: var(--green-bg); color: var(--green); border: 1px solid var(--green-dim); }}
   .badge.sell {{ background: var(--red-bg); color: var(--red); border: 1px solid var(--red-dim); }}
+  .badge.hedge {{ background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-dim); }}
   .badge.na {{ background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }}
 
   /* forecast % coloring */
@@ -325,6 +338,7 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
   <div class="header-stats">
     <div class="stat"><div class="stat-val buy" id="stat-buy">—</div><div class="stat-lbl">Buy Signals</div></div>
     <div class="stat"><div class="stat-val sell" id="stat-sell">—</div><div class="stat-lbl">Sell Signals</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--orange)" id="stat-hedge">—</div><div class="stat-lbl">Hedges (ITM)</div></div>
     <div class="stat"><div class="stat-val" id="stat-tickers">—</div><div class="stat-lbl">Tickers</div></div>
   </div>
 </div>
@@ -333,11 +347,13 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
   <div class="control-group">
     <label>Period</label>
     <div class="pill-group" id="period-pills">
-      <button class="pill active" data-period="1d">1 Day</button>
-      <button class="pill" data-period="3d">3 Days</button>
-      <button class="pill" data-period="7d">7 Days</button>
-      <button class="pill" data-period="14d">2 Weeks</button>
+      <button class="pill active" data-period="7d">7 Days</button>
       <button class="pill" data-period="30d">1 Month</button>
+      <button class="pill" data-period="45d">45 Days</button>
+      <button class="pill" data-period="60d">60 Days</button>
+      <button class="pill" data-period="90d">90 Days</button>
+      <button class="pill" data-period="180d">6 Months</button>
+      <button class="pill" data-period="1y">1 Year</button>
     </div>
   </div>
   <div class="control-group">
@@ -346,6 +362,7 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
       <button class="pill active" data-signal="all">All</button>
       <button class="pill buy" data-signal="BUY">BUY</button>
       <button class="pill sell" data-signal="SELL">SELL</button>
+      <button class="pill hedge" data-signal="HEDGE">HEDGE</button>
     </div>
   </div>
   <div class="control-group">
@@ -363,7 +380,7 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
     <div class="card-header">
       <div>
         <div class="card-title" id="chart-title">Forecast % — 1 Day (Top-ranked contract per ticker)</div>
-        <div class="card-subtitle">Sorted highest gain → loss · Green = BUY · Red = SELL</div>
+        <div class="card-subtitle">Sorted highest gain → loss · Green = BUY · Red = SELL · Orange = HEDGE (ITM, likely institutional)</div>
       </div>
     </div>
     <div class="chart-wrap">
@@ -391,12 +408,12 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
 
 <script>
 const RAW = {data_payload};
-const HORIZONS = ["1d","3d","7d","14d","30d"];
-const HORIZON_LABELS = {{"1d":"1 Day","3d":"3 Days","7d":"7 Days","14d":"2 Weeks","30d":"1 Month"}};
+const HORIZONS = ["7d","30d","45d","60d","90d","180d","1y"];
+const HORIZON_LABELS = {{"7d":"7 Days","30d":"1 Month","45d":"45 Days","60d":"60 Days","90d":"90 Days","180d":"6 Months","1y":"1 Year"}};
 const TOP_N = {TOP_N};
 
 let state = {{
-  period: "1d",
+  period: "7d",
   signal: "all",
   search: "",
   sortCol: null,
@@ -422,7 +439,7 @@ function fmtVol(v) {{
 }}
 function badge(signal) {{
   if (!signal) return '<span class="badge na">N/A</span>';
-  const cls = signal === "BUY" ? "buy" : "sell";
+  const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "hedge";
   return `<span class="badge ${{cls}}">${{signal}}</span>`;
 }}
 function getTopContract(ticker, period) {{
@@ -484,7 +501,10 @@ function renderChart(data) {{
   const colors = data.map(t => {{
     const c = getTopContract(t, state.period);
     if (!c || !c.signal) return "rgba(100,116,139,0.5)";
-    return c.signal === "BUY" ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)";
+    if (c.signal === "BUY")   return "rgba(34,197,94,0.75)";
+    if (c.signal === "SELL")  return "rgba(239,68,68,0.75)";
+    if (c.signal === "HEDGE") return "rgba(249,115,22,0.75)";
+    return "rgba(100,116,139,0.5)";
   }});
   const borderColors = colors.map(c => c.replace("0.75", "1").replace("0.5", "0.9"));
 
@@ -603,11 +623,13 @@ function renderDetailRow(ticker, colSpan) {{
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
           <div class="rank-detail"><span class="pct na">N/A</span></div>
         </div>`;
+      const moneynessLabel = c.moneyness ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>` : "";
       return `
         <div class="rank-row">
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
           <div class="rank-detail">
             <span class="rank-strike">$${{c.strike ?? "—"}}</span>
+            ${{moneynessLabel}}
             ${{badge(c.signal)}}
             ${{fmt(c.forecast_pct)}}
             <span class="rank-vol">Vol: ${{fmtVol(c.volume)}}</span>
@@ -662,18 +684,20 @@ function renderTableBody(data) {{
 }}
 
 function updateStats(data) {{
-  let buy = 0, sell = 0;
+  let buy = 0, sell = 0, hedge = 0;
   data.forEach(t => {{
     HORIZONS.forEach(h => {{
       const contracts = t.horizons[h]?.contracts ?? [];
       contracts.forEach(c => {{
-        if (c?.signal === "BUY") buy++;
-        else if (c?.signal === "SELL") sell++;
+        if (c?.signal === "BUY")   buy++;
+        else if (c?.signal === "SELL")  sell++;
+        else if (c?.signal === "HEDGE") hedge++;
       }});
     }});
   }});
   document.getElementById("stat-buy").textContent = buy.toLocaleString();
   document.getElementById("stat-sell").textContent = sell.toLocaleString();
+  document.getElementById("stat-hedge").textContent = hedge.toLocaleString();
   document.getElementById("stat-tickers").textContent = data.length;
   document.getElementById("result-count").textContent =
     `${{data.length}} of ${{RAW.tickers.length}} tickers`;

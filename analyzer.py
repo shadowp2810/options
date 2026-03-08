@@ -8,11 +8,13 @@ import pandas as pd
 from typing import Optional
 
 HORIZONS: dict[str, int] = {
-    "1d":  1,
-    "3d":  3,
-    "7d":  7,
-    "14d": 14,
-    "30d": 30,
+    "7d":   7,
+    "30d":  30,
+    "45d":  45,
+    "60d":  60,
+    "90d":  90,
+    "180d": 180,
+    "1y":   365,
 }
 
 TOP_N = 3
@@ -53,6 +55,21 @@ def find_nearest_expiry(expirations: list[str], target_date: date) -> Optional[s
     return candidates[0][1]
 
 
+def classify_signal(opt_type: str, strike: float, current_price: float) -> str:
+    """
+    Returns the directional signal for a contract:
+    - OTM Call (strike > price)  → BUY   (bet on upside)
+    - OTM Put  (strike < price)  → SELL  (bet on downside)
+    - ITM Call (strike < price)  → HEDGE (already profitable call, likely covering)
+    - ITM Put  (strike > price)  → HEDGE (insurance on existing long position)
+    - ATM (strike == price)      → BUY for calls, SELL for puts
+    """
+    if opt_type == "call":
+        return "BUY" if strike >= current_price else "HEDGE"
+    else:  # put
+        return "SELL" if strike <= current_price else "HEDGE"
+
+
 def top_contracts(
     chain_df: pd.DataFrame,
     current_price: float,
@@ -60,7 +77,7 @@ def top_contracts(
 ) -> list[dict]:
     """
     Returns the top-N contracts by volume from a combined calls+puts DataFrame.
-    Each entry: {strike, type, volume, signal, forecast_pct}
+    Each entry: {strike, type, volume, signal, moneyness, forecast_pct}
     """
     df = chain_df[chain_df["volume"] > 0].copy()
     df = df.sort_values("volume", ascending=False).head(n)
@@ -70,13 +87,19 @@ def top_contracts(
         strike = float(row["strike"])
         opt_type = str(row["type"])
         volume = int(row["volume"])
-        signal = "BUY" if opt_type == "call" else "SELL"
+        signal = classify_signal(opt_type, strike, current_price)
+        # Moneyness label for display
+        if opt_type == "call":
+            moneyness = "OTM" if strike > current_price else ("ATM" if strike == current_price else "ITM")
+        else:
+            moneyness = "OTM" if strike < current_price else ("ATM" if strike == current_price else "ITM")
         forecast_pct = round((strike - current_price) / current_price * 100, 2)
         results.append({
             "strike": strike,
             "type": opt_type.capitalize(),
             "volume": volume,
             "signal": signal,
+            "moneyness": moneyness,
             "forecast_pct": forecast_pct,
         })
 
@@ -87,6 +110,7 @@ def top_contracts(
             "type": None,
             "volume": None,
             "signal": None,
+            "moneyness": None,
             "forecast_pct": None,
         })
 
@@ -114,7 +138,7 @@ def analyze_ticker(
             result["horizons"][label] = {
                 "expiry": None,
                 "contracts": [{"strike": None, "type": None, "volume": None,
-                                "signal": None, "forecast_pct": None}] * TOP_N,
+                                "signal": None, "moneyness": None, "forecast_pct": None}] * TOP_N,
             }
         return result
 
@@ -124,7 +148,7 @@ def analyze_ticker(
 
         if expiry is None or expiry not in chains:
             contracts = [{"strike": None, "type": None, "volume": None,
-                          "signal": None, "forecast_pct": None}] * TOP_N
+                          "signal": None, "moneyness": None, "forecast_pct": None}] * TOP_N
         else:
             contracts = top_contracts(chains[expiry], price)
 
