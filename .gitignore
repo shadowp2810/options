@@ -2,5 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 
-# # Generated reports
-# reports/
+# Generated reports (local only — docs/index.html is the deployed version)
+reports/
+
+# docs/ is intentionally tracked (contains CNAME + deployed index.html)
+!docs/

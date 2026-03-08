@@ -25,8 +25,12 @@ NASDAQ_100 = [
     "ANSS", "ALGN", "CDW", "SGEN", "HOLX", "MTCH", "SWKS", "INCY", "WBA", "PDD",
 ]
 
+OTHERS = [
+    "NET",
+]
+
 def get_universe() -> list[str]:
-    combined = list(set(SP500_IT + NASDAQ_100))
+    combined = list(set(SP500_IT + NASDAQ_100 + OTHERS))
     combined.sort()
     return combined
 
