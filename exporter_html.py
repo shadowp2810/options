@@ -350,7 +350,14 @@ def write_html(
   .rank-num.r3 {{ background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed44; }}
   .rank-detail {{ flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }}
   .rank-strike {{ color: var(--text); font-weight: 600; }}
-  .rank-vol {{ color: var(--text-dim); font-size: 10px; }}
+  .rank-vol {{ font-size: 10px; }}
+  .vol-vlow  {{ color: #334155; }}
+  .vol-low   {{ color: #64748b; }}
+  .vol-med   {{ color: var(--text-dim); }}
+  .vol-high  {{ color: #4ade80; }}
+  .vol-vhigh {{ color: #22c55e; font-weight: 600; }}
+  .rank-row-dimmed {{ opacity: 0.28; }}
+  .period-cell-dimmed {{ opacity: 0.3; }}
 
   /* ---- Empty state ---- */
   .empty-state {{
@@ -408,6 +415,54 @@ def write_html(
   ::-webkit-scrollbar-track {{ background: var(--bg); }}
   ::-webkit-scrollbar-thumb {{ background: var(--border); border-radius: 3px; }}
   ::-webkit-scrollbar-thumb:hover {{ background: var(--text-dim); }}
+
+  /* ---- Mobile ---- */
+  @media (max-width: 640px) {{
+    .header {{
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      position: static;
+    }}
+    .header-stats {{
+      width: 100%;
+      justify-content: space-between;
+    }}
+    .stat {{ text-align: left; }}
+    .stat-val {{ font-size: 16px; }}
+
+    .controls {{
+      padding: 10px 16px;
+      gap: 10px;
+    }}
+    .control-group {{
+      flex-direction: column;
+      align-items: flex-start;
+      width: 100%;
+    }}
+    .pill-group {{
+      flex-wrap: wrap;
+    }}
+    .search-input {{
+      width: 100%;
+    }}
+    .controls-right {{
+      width: 100%;
+      margin-left: 0;
+    }}
+
+    .main {{ padding: 12px 16px; }}
+
+    .card-header {{ flex-direction: column; align-items: flex-start; gap: 6px; }}
+
+    th, td {{ padding: 6px 8px; font-size: 11px; }}
+    .th-horizon {{ padding: 6px 8px; }}
+
+    .expand-icon {{ display: none; }}
+    .ticker-cell {{ font-size: 12px; font-weight: 700; }}
+    .price-cell {{ font-size: 11px; }}
+  }}
 </style>
 </head>
 <body>
@@ -446,6 +501,16 @@ def write_html(
       <button class="pill buy" data-signal="BUY">BUY</button>
       <button class="pill sell" data-signal="SELL">SELL</button>
       <button class="pill hedge" data-signal="HEDGE">HEDGE</button>
+    </div>
+  </div>
+  <div class="control-group">
+    <label>Min Volume</label>
+    <div class="pill-group" id="vol-pills">
+      <button class="pill active" data-minvol="0">All</button>
+      <button class="pill" data-minvol="500">500+</button>
+      <button class="pill" data-minvol="1000">1K+</button>
+      <button class="pill" data-minvol="2000">2K+</button>
+      <button class="pill" data-minvol="10000">10K+</button>
     </div>
   </div>
   <div class="control-group">
@@ -499,6 +564,7 @@ let state = {{
   period: "7d",
   signal: "all",
   search: "",
+  minVol: 0,
   sortCol: null,
   sortDir: 1,
 }};
@@ -519,7 +585,9 @@ function fmtPrice(v) {{
 }}
 function fmtVol(v) {{
   if (v == null) return "—";
-  return v.toLocaleString("en-US");
+  const s = v.toLocaleString("en-US");
+  const cls = v < 500 ? "vol-vlow" : v < 2000 ? "vol-low" : v < 10000 ? "vol-med" : v < 50000 ? "vol-high" : "vol-vhigh";
+  return `<span class="${{cls}}">${{s}}</span>`;
 }}
 function badge(signal) {{
   if (!signal) return '<span class="badge na">N/A</span>';
@@ -714,7 +782,8 @@ function periodCell(ticker, period) {{
   const c = getTopContract(ticker, period);
   const ew = h ? h.earnings_in_window : false;
   if (!c || !c.signal) return `<td class="period-cell">${{earningsBadge(ew, ticker.earnings_date)}}<span class="pct na">N/A</span></td>`;
-  return `<td class="period-cell">
+  const belowVol = state.minVol > 0 && (c.volume == null || c.volume < state.minVol);
+  return `<td class="period-cell${{belowVol ? " period-cell-dimmed" : ""}}">
     ${{earningsBadge(ew, ticker.earnings_date)}}
     ${{badge(c.signal)}} ${{fmt(c.forecast_pct)}}
     ${{flipBadge(c)}}
@@ -735,8 +804,9 @@ function renderDetailRow(ticker, colSpan) {{
           <div class="rank-detail"><span class="pct na">N/A</span></div>
         </div>`;
       const moneynessLabel = c.moneyness ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>` : "";
+      const dimmed = state.minVol > 0 && (c.volume == null || c.volume < state.minVol);
       return `
-        <div class="rank-row">
+        <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
           <div class="rank-detail">
             <span class="rank-strike">$${{c.strike ?? "—"}}</span>
@@ -774,8 +844,9 @@ function renderDetailRow(ticker, colSpan) {{
         const moneynessLabel = c.moneyness
           ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>`
           : "";
+        const dimmed = state.minVol > 0 && (c.volume == null || c.volume < state.minVol);
         return `
-          <div class="rank-row">
+          <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
             <div class="rank-detail">
               <span class="rank-strike">$${{c.strike ?? "—"}}</span>
@@ -885,6 +956,15 @@ document.getElementById("signal-pills").addEventListener("click", e => {{
   document.querySelectorAll("[data-signal]").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   state.signal = btn.dataset.signal;
+  render();
+}});
+
+document.getElementById("vol-pills").addEventListener("click", e => {{
+  const btn = e.target.closest("[data-minvol]");
+  if (!btn) return;
+  document.querySelectorAll("[data-minvol]").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  state.minVol = parseInt(btn.dataset.minvol, 10);
   render();
 }});
 
