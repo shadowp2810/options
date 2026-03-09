@@ -40,11 +40,13 @@ BLUE_FILL    = PatternFill("solid", fgColor="BDD7EE")
 GREY_FILL    = PatternFill("solid", fgColor="D9D9D9")
 HEADER_FILL  = PatternFill("solid", fgColor="1F4E79")
 SUBHDR_FILL  = PatternFill("solid", fgColor="2E75B6")
-RANK_FILLS   = [
+_RANK_FILLS_3 = [
     PatternFill("solid", fgColor="DDEBF7"),
     PatternFill("solid", fgColor="EBF3FB"),
     PatternFill("solid", fgColor="F5F9FE"),
 ]
+# Extend to 10 ranks — ranks 4-10 use the lightest shade
+RANK_FILLS = _RANK_FILLS_3 + [_RANK_FILLS_3[-1]] * 7
 
 WHITE_FONT   = Font(color="FFFFFF", bold=True)
 BOLD_FONT    = Font(bold=True)
@@ -82,6 +84,7 @@ def build_detail_rows(analyzed: list[dict]) -> list[dict]:
                     "⚠️ Earnings":       "YES" if earnings_in_win else "",
                     "Strike":            contract.get("strike"),
                     "Type":              contract.get("type"),
+                    "Open Interest":     contract.get("open_interest"),
                     "Volume":            contract.get("volume"),
                     "Signal":            contract.get("signal"),
                     "Forecast %":        contract.get("forecast_pct"),
@@ -99,7 +102,7 @@ def build_detail_rows(analyzed: list[dict]) -> list[dict]:
 def write_detail_sheet(ws, rows: list[dict]):
     headers = [
         "Ticker", "Current Price", "Earnings Date", "Horizon", "Rank",
-        "Expiry Date", "⚠️ Earnings", "Strike", "Type", "Volume",
+        "Expiry Date", "⚠️ Earnings", "Strike", "Type", "Open Interest", "Volume",
         "Signal", "Forecast %", "Prev Strike", "Strike Δ", "Prev Signal", "Signal Flipped",
     ]
 
@@ -118,7 +121,7 @@ def write_detail_sheet(ws, rows: list[dict]):
         values = [
             row["Ticker"], row["Current Price"], row["Earnings Date"],
             row["Horizon"], row["Rank"], row["Expiry Date"], row["⚠️ Earnings"],
-            row["Strike"], row["Type"], row["Volume"], row["Signal"],
+            row["Strike"], row["Type"], row["Open Interest"], row["Volume"], row["Signal"],
             row["Forecast %"], row["Prev Strike"], row["Strike Δ"],
             row["Prev Signal"], row["Signal Flipped"],
         ]
@@ -157,7 +160,7 @@ def write_detail_sheet(ws, rows: list[dict]):
                 elif val < 0:
                     cell.fill = RED_FILL
                     cell.font = Font(color="9C0006")
-            elif col_name == "Volume" and val is not None:
+            elif col_name in ("Open Interest", "Volume") and val is not None:
                 cell.number_format = '#,##0'
             elif col_name == "Rank":
                 fills = [GREEN_FILL, YELLOW_FILL, PatternFill("solid", fgColor="FCE4D6")]
@@ -190,7 +193,7 @@ def write_summary_sheet(ws, analyzed: list[dict]):
     # Build column structure
     # Fixed cols: Ticker (1), Current Price (2)
     # Per horizon: TOP_N ranks × 5 fields = 15 cols per horizon
-    FIELDS = ["Strike", "Type", "Volume", "Signal", "Forecast %"]
+    FIELDS = ["Strike", "Type", "OI", "Signal", "Forecast %"]
     N_FIELDS = len(FIELDS)
 
     fixed_cols = 2
@@ -276,7 +279,7 @@ def write_summary_sheet(ws, analyzed: list[dict]):
                 base_col = start_col + rank_idx * N_FIELDS
                 strike   = contract.get("strike")
                 opt_type = contract.get("type")
-                volume   = contract.get("volume")
+                volume   = contract.get("open_interest")
                 signal   = contract.get("signal")
                 forecast = contract.get("forecast_pct")
                 rank_fill = RANK_FILLS[rank_idx]
@@ -291,7 +294,7 @@ def write_summary_sheet(ws, analyzed: list[dict]):
                 c = ws.cell(row=row, column=base_col + 1, value=opt_type)
                 c.fill = rank_fill; c.alignment = CENTER; c.border = THIN_BORDER
 
-                # Volume
+                # Open Interest
                 c = ws.cell(row=row, column=base_col + 2, value=volume)
                 c.fill = rank_fill; c.alignment = CENTER; c.border = THIN_BORDER
                 if volume is not None:

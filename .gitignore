@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+keys.env
+*.env
 
 # Ignore all generated report files inside reports/
 reports/*

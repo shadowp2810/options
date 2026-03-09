@@ -1,11 +1,15 @@
 """
-Fetches current stock price and options chain data via yfinance.
+Fetches stock/options data.
+- Price, earnings date, company info: yfinance
+- Options chain (volume + accurate open interest): NASDAQ public API
+  (falls back to yfinance if NASDAQ returns nothing)
 """
 
 import time
 import yfinance as yf
 import pandas as pd
 from typing import Optional
+from nasdaq_fetcher import get_options_chain_nasdaq
 
 
 def get_stock_data(ticker: str) -> tuple[Optional[float], Optional[yf.Ticker]]:
@@ -118,7 +122,13 @@ def fetch_all(tickers: list[str], delay: float = 0.6) -> dict:
 
         earnings_date = get_earnings_date(ticker_obj)
         company_info  = get_company_info(ticker_obj)
-        expirations, chains = get_options_chain(ticker_obj, ticker)
+
+        # NASDAQ public API gives accurate OI for free; fall back to yfinance
+        expirations, chains = get_options_chain_nasdaq(ticker)
+        if not expirations:
+            print(f"  [INFO] {ticker}: NASDAQ returned nothing, using yfinance fallback")
+            expirations, chains = get_options_chain(ticker_obj, ticker)
+
         results[ticker] = {
             "price": round(price, 2),
             "earnings_date": earnings_date,

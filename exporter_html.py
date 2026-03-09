@@ -56,7 +56,7 @@ def write_html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Options Volume Signal Dashboard</title>
+<title>Options Open Interest Signal Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {{
@@ -397,6 +397,21 @@ def write_html(
   .rank-row-dimmed {{ opacity: 0.28; }}
   .period-cell-dimmed {{ opacity: 0.3; }}
 
+  /* ---- OI bar chart inside horizon blocks ---- */
+  .oi-chart-wrap {{
+    padding: 6px 10px 8px;
+    height: 130px;
+    position: relative;
+    border-top: 1px solid var(--border);
+  }}
+  .oi-chart-label {{
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }}
+
   /* ---- Empty state ---- */
   .empty-state {{
     text-align: center;
@@ -507,7 +522,7 @@ def write_html(
 
 <div class="header">
     <div class="header-left">
-    <h1>Options <span>Volume Signal</span> Dashboard</h1>
+    <h1>Options <span>Open Interest</span> Dashboard</h1>
     <p>Generated: {timestamp} &nbsp;·&nbsp; S&amp;P 500 IT + Nasdaq-100 &nbsp;·&nbsp; {delta_context}</p>
   </div>
   <div class="header-stats">
@@ -543,13 +558,13 @@ def write_html(
     </div>
   </div>
   <div class="control-group">
-    <label>Min Volume</label>
-    <div class="pill-group" id="vol-pills">
-      <button class="pill active" data-minvol="0">All</button>
-      <button class="pill" data-minvol="500">500+</button>
-      <button class="pill" data-minvol="1000">1K+</button>
-      <button class="pill" data-minvol="2000">2K+</button>
-      <button class="pill" data-minvol="10000">10K+</button>
+    <label>Min OI</label>
+    <div class="pill-group" id="oi-pills">
+      <button class="pill active" data-minoi="0">All</button>
+      <button class="pill" data-minoi="500">500+</button>
+      <button class="pill" data-minoi="1000">1K+</button>
+      <button class="pill" data-minoi="5000">5K+</button>
+      <button class="pill" data-minoi="10000">10K+</button>
     </div>
   </div>
   <div class="control-group">
@@ -567,7 +582,7 @@ def write_html(
     <div class="card-header">
       <div>
         <div class="card-title" id="chart-title">Forecast % — 1 Day (Top-ranked contract per ticker)</div>
-        <div class="card-subtitle">Sorted highest gain → loss · Green = BUY · Red = SELL · Orange = HEDGE-C (ITM Call) · Purple = HEDGE-P (ITM Put)</div>
+        <div class="card-subtitle">Sorted highest gain → loss · Top contract ranked by OI · Vol shown for reference · Green = BUY · Red = SELL · Orange = HEDGE-C/P (ITM)</div>
       </div>
     </div>
     <div class="chart-wrap">
@@ -621,7 +636,7 @@ let state = {{
   period: "7d",
   signal: "all",
   search: "",
-  minVol: 0,
+  minOI: 0,
   sortCol: null,
   sortDir: 1,
 }};
@@ -640,11 +655,15 @@ function fmtPrice(v) {{
   if (v == null) return '<span class="pct na">N/A</span>';
   return `${{v.toLocaleString("en-US", {{minimumFractionDigits:2, maximumFractionDigits:2}})}}`;
 }}
-function fmtVol(v) {{
-  if (v == null) return "—";
+function fmtOI(v) {{
+  if (v == null || v === 0) return '<span class="vol-vlow">—</span>';
   const s = v.toLocaleString("en-US");
-  const cls = v < 500 ? "vol-vlow" : v < 2000 ? "vol-low" : v < 10000 ? "vol-med" : v < 50000 ? "vol-high" : "vol-vhigh";
+  const cls = v < 500 ? "vol-vlow" : v < 1000 ? "vol-low" : v < 5000 ? "vol-med" : v < 10000 ? "vol-high" : "vol-vhigh";
   return `<span class="${{cls}}">${{s}}</span>`;
+}}
+function fmtVol(v) {{
+  if (v == null || v === 0) return "";
+  return `<span style="color:var(--text-dim);font-size:9px"> Vol: ${{v.toLocaleString("en-US")}}</span>`;
 }}
 function badge(signal) {{
   if (!signal) return '<span class="badge na">N/A</span>';
@@ -771,7 +790,8 @@ function renderChart(data) {{
               return [
                 `Strike: ${{c.strike ?? "N/A"}}`,
                 `Type: ${{c.type ?? "N/A"}}`,
-                `Volume: ${{fmtVol(c.volume)}}`,
+                `OI: ${{(c.open_interest ?? 0).toLocaleString("en-US")}}`,
+                `Vol: ${{(c.volume ?? 0).toLocaleString("en-US")}}`,
                 `Signal: ${{c.signal ?? "N/A"}}`,
                 `Forecast: ${{c.forecast_pct != null ? (c.forecast_pct > 0 ? "+" : "") + c.forecast_pct.toFixed(2) + "%" : "N/A"}}`,
               ];
@@ -842,7 +862,7 @@ function periodCell(ticker, period) {{
   const c = getTopContract(ticker, period);
   const ew = h ? h.earnings_in_window : false;
   if (!c || !c.signal) return `<td class="period-cell">${{earningsBadge(ew, ticker.earnings_date)}}<span class="pct na">N/A</span></td>`;
-  const belowVol = state.minVol > 0 && (c.volume == null || c.volume < state.minVol);
+  const belowVol = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
   return `<td class="period-cell${{belowVol ? " period-cell-dimmed" : ""}}">
     ${{earningsBadge(ew, ticker.earnings_date)}}
     ${{badge(c.signal)}} ${{fmt(c.forecast_pct)}}
@@ -857,14 +877,15 @@ function buildDetailCellContent(ticker) {{
     const earningsInWin = hData ? hData.earnings_in_window : false;
     const contracts = hData ? hData.contracts : [];
     const rankClasses = ["r1", "r2", "r3"];
-    const rankRows = contracts.map((c, i) => {{
+    // Show top 3 in rank rows; all 10 are available for the chart below
+    const rankRows = contracts.slice(0, 3).map((c, i) => {{
       if (!c || !c.signal) return `
         <div class="rank-row">
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
           <div class="rank-detail"><span class="pct na">N/A</span></div>
         </div>`;
       const moneynessLabel = c.moneyness ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>` : "";
-      const dimmed = state.minVol > 0 && (c.volume == null || c.volume < state.minVol);
+      const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
       return `
         <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
@@ -875,10 +896,17 @@ function buildDetailCellContent(ticker) {{
             ${{fmt(c.forecast_pct)}}
             ${{deltaBadge(c)}}
             ${{flipBadge(c)}}
-            <span class="rank-vol">Vol: ${{fmtVol(c.volume)}}</span>
+            <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}${{fmtVol(c.volume)}}</span>
           </div>
         </div>`;
     }}).join("");
+
+    const chartId = `oi-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-${{h}}`;
+    const chartHtml = contracts.length > 0 ? `
+      <div class="oi-chart-wrap">
+        <div class="oi-chart-label">Top OI by strike</div>
+        <canvas id="${{chartId}}" style="height:100px"></canvas>
+      </div>` : "";
 
     return `<div class="horizon-block">
       <div class="horizon-block-header">
@@ -886,6 +914,7 @@ function buildDetailCellContent(ticker) {{
         <span class="expiry">${{expiry ?? "N/A"}}</span>
       </div>
       ${{rankRows}}
+      ${{chartHtml}}
     </div>`;
   }}).join("");
 
@@ -895,7 +924,8 @@ function buildDetailCellContent(ticker) {{
   if (iw.length > 0) {{
     const iwBlocks = iw.map(entry => {{
       const rankClasses = ["r1", "r2", "r3"];
-      const rows = entry.contracts.map((c, i) => {{
+      // Top 3 rank rows only
+      const rows = entry.contracts.slice(0, 3).map((c, i) => {{
         if (!c || !c.signal) return `
           <div class="rank-row">
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
@@ -904,7 +934,7 @@ function buildDetailCellContent(ticker) {{
         const moneynessLabel = c.moneyness
           ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>`
           : "";
-        const dimmed = state.minVol > 0 && (c.volume == null || c.volume < state.minVol);
+        const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
         return `
           <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
@@ -913,16 +943,23 @@ function buildDetailCellContent(ticker) {{
               ${{moneynessLabel}}
               ${{badge(c.signal)}}
               ${{fmt(c.forecast_pct)}}
-              <span class="rank-vol">Vol: ${{fmtVol(c.volume)}}</span>
+              <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}${{fmtVol(c.volume)}}</span>
             </div>
           </div>`;
       }}).join("");
+      const iwChartId = `oi-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-iw-${{entry.expiry}}`;
+      const iwChartHtml = entry.contracts.length > 0 ? `
+        <div class="oi-chart-wrap">
+          <div class="oi-chart-label">Top OI by strike</div>
+          <canvas id="${{iwChartId}}" style="height:100px"></canvas>
+        </div>` : "";
       return `<div class="intraweek-block">
         <div class="intraweek-block-header">
           <span class="intraweek-day">${{entry.day}}</span>
           <span class="intraweek-expiry">${{entry.expiry}}</span>
         </div>
         ${{rows}}
+        ${{iwChartHtml}}
       </div>`;
     }}).join("");
     intraweekHtml = `<div class="intraweek-section">
@@ -944,6 +981,185 @@ function buildDetailCellContent(ticker) {{
 }}
 
 const expandedTickers = new Set(); // persists across renders
+const oiCharts = {{}}; // ticker -> [Chart, ...]
+
+function initOICharts(tickerStr, tickerData) {{
+  // Destroy any previous instances for this ticker
+  if (oiCharts[tickerStr]) {{
+    oiCharts[tickerStr].forEach(c => {{ try {{ c.destroy(); }} catch(e) {{}} }});
+  }}
+  oiCharts[tickerStr] = [];
+
+  HORIZONS.forEach(h => {{
+    const safeId = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
+    const canvas = document.getElementById(`oi-chart-${{safeId}}-${{h}}`);
+    if (!canvas) return;
+
+    const hData = tickerData.horizons?.[h];
+    const contracts = (hData?.contracts ?? []).filter(c => c && (c.open_interest ?? 0) > 0);
+    if (contracts.length === 0) return;
+
+    // Pick top 10 by OI, then group by strike for stacked call/put view
+    const top10 = [...contracts].sort((a, b) => b.open_interest - a.open_interest).slice(0, 10);
+    const strikes = [...new Set(top10.map(c => c.strike))].sort((a, b) => a - b);
+
+    // Build a map: strike -> {{call: oi, put: oi, callVol, putVol}}
+    const byStrike = {{}};
+    top10.forEach(c => {{
+      const k = c.strike;
+      if (!byStrike[k]) byStrike[k] = {{ call: 0, put: 0, callVol: 0, putVol: 0, callSig: null, putSig: null }};
+      if (c.type === "Call") {{
+        byStrike[k].call    = c.open_interest ?? 0;
+        byStrike[k].callVol = c.volume ?? 0;
+        byStrike[k].callSig = c.signal;
+      }} else {{
+        byStrike[k].put    = c.open_interest ?? 0;
+        byStrike[k].putVol = c.volume ?? 0;
+        byStrike[k].putSig = c.signal;
+      }}
+    }});
+
+    const labels    = strikes.map(s => `$${{s}}`);
+    const callData  = strikes.map(s => byStrike[s]?.call ?? 0);
+    const putData   = strikes.map(s => byStrike[s]?.put  ?? 0);
+
+    const chart = new Chart(canvas.getContext("2d"), {{
+      type: "bar",
+      data: {{
+        labels,
+        datasets: [
+          {{
+            label: "Call OI",
+            data: callData,
+            backgroundColor: "rgba(34,197,94,0.75)",
+            borderColor: "rgba(34,197,94,1)",
+            borderWidth: 1,
+            borderRadius: 2,
+            stack: "oi",
+          }},
+          {{
+            label: "Put OI",
+            data: putData,
+            backgroundColor: "rgba(239,68,68,0.75)",
+            borderColor: "rgba(239,68,68,1)",
+            borderWidth: 1,
+            borderRadius: 2,
+            stack: "oi",
+          }},
+        ]
+      }},
+      options: {{
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {{
+          legend: {{
+            display: true,
+            position: "top",
+            align: "end",
+            labels: {{ color: "#94a3b8", boxWidth: 10, font: {{ size: 9 }}, padding: 6 }},
+          }},
+          tooltip: {{
+            mode: "index",
+            intersect: false,
+            callbacks: {{
+              title: (items) => `Strike $${{strikes[items[0].dataIndex]}}`,
+              label(ctx) {{
+                const s = strikes[ctx.dataIndex];
+                const d = byStrike[s] ?? {{}};
+                if (ctx.dataset.label === "Call OI") {{
+                  return d.call > 0
+                    ? `Call OI: ${{d.call.toLocaleString()}} | Vol: ${{d.callVol.toLocaleString()}}${{d.callSig ? " | " + d.callSig : ""}}`
+                    : null;
+                }} else {{
+                  return d.put > 0
+                    ? `Put  OI: ${{d.put.toLocaleString()}} | Vol: ${{d.putVol.toLocaleString()}}${{d.putSig ? " | " + d.putSig : ""}}`
+                    : null;
+                }}
+              }},
+              filter: item => item.parsed.y > 0,
+            }},
+            backgroundColor: "#1a1d27", borderColor: "#2e3250", borderWidth: 1,
+            titleColor: "#e2e8f0", bodyColor: "#94a3b8", padding: 8,
+          }},
+        }},
+        scales: {{
+          x: {{
+            stacked: true,
+            ticks: {{ color: "#64748b", font: {{ size: 9 }}, maxRotation: 40 }},
+            grid: {{ color: "#1e2235" }},
+          }},
+          y: {{
+            stacked: true,
+            ticks: {{
+              color: "#64748b",
+              font: {{ size: 9 }},
+              callback: v => v >= 1000 ? (v / 1000).toFixed(0) + "k" : v,
+            }},
+            grid: {{ color: "#1e2235" }},
+          }},
+        }},
+      }},
+    }});
+    oiCharts[tickerStr].push(chart);
+  }});
+
+  // Intra-week charts (same logic, keyed by expiry date)
+  const iwEntries = tickerData.intraweek ?? [];
+  iwEntries.forEach(entry => {{
+    const safeId  = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
+    const canvas  = document.getElementById(`oi-chart-${{safeId}}-iw-${{entry.expiry}}`);
+    if (!canvas) return;
+
+    const contracts = (entry.contracts ?? []).filter(c => c && (c.open_interest ?? 0) > 0);
+    if (contracts.length === 0) return;
+
+    const top10  = [...contracts].sort((a, b) => b.open_interest - a.open_interest).slice(0, 10);
+    const strikes = [...new Set(top10.map(c => c.strike))].sort((a, b) => a - b);
+    const byStrike = {{}};
+    top10.forEach(c => {{
+      const k = c.strike;
+      if (!byStrike[k]) byStrike[k] = {{ call:0, put:0, callVol:0, putVol:0, callSig:null, putSig:null }};
+      if (c.type === "Call") {{ byStrike[k].call=c.open_interest??0; byStrike[k].callVol=c.volume??0; byStrike[k].callSig=c.signal; }}
+      else                   {{ byStrike[k].put =c.open_interest??0; byStrike[k].putVol =c.volume??0; byStrike[k].putSig =c.signal; }}
+    }});
+
+    const chart = new Chart(canvas.getContext("2d"), {{
+      type: "bar",
+      data: {{
+        labels: strikes.map(s => `$${{s}}`),
+        datasets: [
+          {{ label:"Call OI", data:strikes.map(s=>byStrike[s]?.call??0), backgroundColor:"rgba(34,197,94,0.75)", borderColor:"rgba(34,197,94,1)", borderWidth:1, borderRadius:2, stack:"oi" }},
+          {{ label:"Put OI",  data:strikes.map(s=>byStrike[s]?.put??0),  backgroundColor:"rgba(239,68,68,0.75)", borderColor:"rgba(239,68,68,1)",  borderWidth:1, borderRadius:2, stack:"oi" }},
+        ]
+      }},
+      options: {{
+        animation: false, responsive: true, maintainAspectRatio: false,
+        plugins: {{
+          legend: {{ display:true, position:"top", align:"end", labels:{{ color:"#94a3b8", boxWidth:10, font:{{size:9}}, padding:6 }} }},
+          tooltip: {{
+            mode:"index", intersect:false,
+            callbacks: {{
+              title: items => `Strike $${{strikes[items[0].dataIndex]}}`,
+              label(ctx) {{
+                const s=strikes[ctx.dataIndex]; const d=byStrike[s]??{{}};
+                if (ctx.dataset.label==="Call OI") return d.call>0?`Call OI: ${{d.call.toLocaleString()}} | Vol: ${{d.callVol.toLocaleString()}}${{d.callSig?" | "+d.callSig:""}}`:null;
+                return d.put>0?`Put  OI: ${{d.put.toLocaleString()}} | Vol: ${{d.putVol.toLocaleString()}}${{d.putSig?" | "+d.putSig:""}}`:null;
+              }},
+              filter: item => item.parsed.y > 0,
+            }},
+            backgroundColor:"#1a1d27", borderColor:"#2e3250", borderWidth:1, titleColor:"#e2e8f0", bodyColor:"#94a3b8", padding:8,
+          }},
+        }},
+        scales: {{
+          x: {{ stacked:true, ticks:{{color:"#64748b",font:{{size:9}},maxRotation:40}}, grid:{{color:"#1e2235"}} }},
+          y: {{ stacked:true, ticks:{{color:"#64748b",font:{{size:9}},callback:v=>v>=1000?(v/1000).toFixed(0)+"k":v}}, grid:{{color:"#1e2235"}} }},
+        }},
+      }},
+    }});
+    oiCharts[tickerStr].push(chart);
+  }});
+}}
 
 function renderTableBody(data) {{
   const tbody = document.getElementById("table-body");
@@ -976,7 +1192,10 @@ function renderTableBody(data) {{
     const t = data.find(d => d.ticker === ticker);
     if (!t) return;
     const cell = document.querySelector(`#detail-${{ticker}} td`);
-    if (cell) cell.innerHTML = buildDetailCellContent(t);
+    if (cell) {{
+      cell.innerHTML = buildDetailCellContent(t);
+      requestAnimationFrame(() => initOICharts(ticker, t));
+    }}
   }});
 }}
 
@@ -1024,12 +1243,18 @@ document.getElementById("table-body").addEventListener("click", e => {{
     expandedTickers.add(ticker);
     const cell = detailRow.querySelector("td");
     if (cell && !cell.innerHTML.trim()) {{
-      // First time opening — find ticker in full dataset (not just filtered view)
       const t = RAW.tickers.find(d => d.ticker === ticker);
-      if (t) cell.innerHTML = buildDetailCellContent(t);
+      if (t) {{
+        cell.innerHTML = buildDetailCellContent(t);
+        requestAnimationFrame(() => initOICharts(ticker, t));
+      }}
     }}
   }} else {{
     expandedTickers.delete(ticker);
+    if (oiCharts[ticker]) {{
+      oiCharts[ticker].forEach(c => {{ try {{ c.destroy(); }} catch(e) {{}} }});
+      delete oiCharts[ticker];
+    }}
   }}
 }});
 
@@ -1052,17 +1277,20 @@ document.getElementById("signal-pills").addEventListener("click", e => {{
   requestAnimationFrame(render);
 }});
 
-document.getElementById("vol-pills").addEventListener("click", e => {{
-  const btn = e.target.closest("[data-minvol]");
+document.getElementById("oi-pills").addEventListener("click", e => {{
+  const btn = e.target.closest("[data-minoi]");
   if (!btn) return;
-  document.querySelectorAll("[data-minvol]").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll("[data-minoi]").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
-  state.minVol = parseInt(btn.dataset.minvol, 10);
+  state.minOI = parseInt(btn.dataset.minoi, 10);
   // Re-render any open detail rows so dimming updates immediately
   expandedTickers.forEach(ticker => {{
     const t = RAW.tickers.find(d => d.ticker === ticker);
     const cell = document.querySelector(`#detail-${{ticker}} td`);
-    if (t && cell) cell.innerHTML = buildDetailCellContent(t);
+    if (t && cell) {{
+      cell.innerHTML = buildDetailCellContent(t);
+      requestAnimationFrame(() => initOICharts(ticker, t));
+    }}
   }});
   requestAnimationFrame(render);
 }});

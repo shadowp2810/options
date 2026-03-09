@@ -31,7 +31,7 @@ def next_friday(today: date) -> date:
         days_until = 7  # today is Friday, options already expired at close
     return today + timedelta(days=days_until)
 
-TOP_N = 3
+TOP_N = 10
 MAX_EXPIRY_BUFFER_DAYS = 10  # how far past target we'll look for a valid expiry
 
 
@@ -118,16 +118,21 @@ def top_contracts(
 ) -> list[dict]:
     """
     Returns the top-N contracts by volume from a combined calls+puts DataFrame.
-    Each entry: {strike, type, volume, signal, moneyness, forecast_pct}
+    Each entry: {strike, type, open_interest, volume, signal, moneyness, forecast_pct}
+    Volume = today's trades (reliable from yfinance).
+    Open interest = overnight snapshot (shown when non-zero, but often stale in yfinance).
     """
-    df = chain_df[chain_df["volume"] > 0].copy()
+    df = chain_df.copy()
+    df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0)
+    df = df[df["volume"] > 0].copy()
     df = df.sort_values("volume", ascending=False).head(n)
 
     results = []
     for _, row in df.iterrows():
         strike = float(row["strike"])
         opt_type = str(row["type"])
-        volume = int(row["volume"])
+        open_interest = int(row["openInterest"])
+        volume = int(row["volume"]) if row["volume"] > 0 else 0
         signal = classify_signal(opt_type, strike, current_price)
         # Moneyness label for display
         if opt_type == "call":
@@ -138,6 +143,7 @@ def top_contracts(
         results.append({
             "strike": strike,
             "type": opt_type.capitalize(),
+            "open_interest": open_interest,
             "volume": volume,
             "signal": signal,
             "moneyness": moneyness,
@@ -189,7 +195,7 @@ def analyze_ticker(
     }
 
     empty_contract = {
-        "strike": None, "type": None, "volume": None,
+        "strike": None, "type": None, "open_interest": None, "volume": None,
         "signal": None, "moneyness": None, "forecast_pct": None,
         "prev_strike": None, "strike_delta": None,
         "prev_signal": None, "signal_flipped": False,
