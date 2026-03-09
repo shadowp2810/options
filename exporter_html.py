@@ -283,6 +283,11 @@ def write_html(
     border-left: 1px solid var(--border);
     padding: 8px 12px;
   }}
+  .th-horizon.active-period {{
+    background: rgba(99,102,241,0.12);
+    color: #a5b4fc;
+    border-bottom: 2px solid var(--accent);
+  }}
   .th-date {{ display: block; font-size: 10px; font-weight: 400; color: var(--text-dim); margin-top: 2px; opacity: 0.8; }}
   td.period-cell {{ border-left: 1px solid var(--border); }}
 
@@ -684,7 +689,7 @@ function renderTableHead() {{
     <th class="${{state.sortCol === "price" ? "sorted" : ""}}" data-sort="price">Price ${{sortIcon("price")}}</th>
     <th>Earnings</th>
     ${{HORIZONS.map(h => `
-      <th class="th-horizon ${{state.sortCol === "pct_" + h ? "sorted" : ""}}" data-sort="pct_${{h}}">
+      <th class="th-horizon ${{state.sortCol === "pct_" + h ? "sorted" : ""}} ${{state.period === h ? "active-period" : ""}}" data-sort="pct_${{h}}">
         ${{HORIZON_LABELS[h]}} ${{sortIcon("pct_" + h)}}
         ${{horizonDates[h] ? `<span class="th-date">${{new Date(horizonDates[h] + "T12:00:00").toLocaleDateString("en-US", {{month:"short",day:"numeric"}})}}</span>` : ""}}
       </th>`).join("")}}
