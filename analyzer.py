@@ -117,15 +117,16 @@ def top_contracts(
     n: int = TOP_N,
 ) -> list[dict]:
     """
-    Returns the top-N contracts by volume from a combined calls+puts DataFrame.
+    Returns the top-N contracts ranked by Open Interest from a combined calls+puts DataFrame.
     Each entry: {strike, type, open_interest, volume, signal, moneyness, forecast_pct}
-    Volume = today's trades (reliable from yfinance).
-    Open interest = overnight snapshot (shown when non-zero, but often stale in yfinance).
+    OI = previous-day close snapshot (accurate from NASDAQ API).
+    Volume = today's trades (shown as supplementary info).
     """
     df = chain_df.copy()
     df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0)
-    df = df[df["volume"] > 0].copy()
-    df = df.sort_values("volume", ascending=False).head(n)
+    df["volume"]       = pd.to_numeric(df["volume"],       errors="coerce").fillna(0)
+    df = df[df["openInterest"] > 0].copy()
+    df = df.sort_values("openInterest", ascending=False).head(n)
 
     results = []
     for _, row in df.iterrows():
