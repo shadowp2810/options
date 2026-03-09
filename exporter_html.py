@@ -135,6 +135,24 @@ def write_html(
   .control-group label {{ color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }}
   .pill-group {{ display: flex; gap: 3px; }}
   .pill-date {{ display: block; font-size: 0.65rem; opacity: 0.72; font-weight: 400; line-height: 1.1; margin-top: 1px; }}
+  .ticker-meta {{
+    padding: 10px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }}
+  .ticker-meta-name {{ font-size: 14px; font-weight: 700; color: var(--text); }}
+  .ticker-meta-tags {{ display: flex; gap: 6px; flex-wrap: wrap; }}
+  .ticker-meta-tag {{
+    font-size: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    color: var(--text-muted);
+  }}
   .intraweek-section {{ margin-top: 14px; border-top: 1px dashed #2e3250; padding-top: 10px; padding-bottom: 6px; }}
   .intraweek-header {{ font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #818cf8; margin-bottom: 8px; }}
   .intraweek-blocks {{ display: flex; flex-wrap: wrap; gap: 8px; }}
@@ -814,7 +832,7 @@ function renderTableHead() {{
         state.sortCol = col;
         state.sortDir = col === "ticker" ? 1 : -1;
       }}
-      render();
+      requestAnimationFrame(render);
     }});
   }});
 }}
@@ -832,7 +850,7 @@ function periodCell(ticker, period) {{
   </td>`;
 }}
 
-function renderDetailRow(ticker, colSpan) {{
+function buildDetailCellContent(ticker) {{
   const h_blocks = HORIZONS.map(h => {{
     const hData = ticker.horizons[h];
     const expiry = hData ? hData.expiry : null;
@@ -913,13 +931,19 @@ function renderDetailRow(ticker, colSpan) {{
     </div>`;
   }}
 
-  return `<tr class="detail-row" id="detail-${{ticker.ticker}}">
-    <td class="detail-cell" colspan="${{colSpan}}">
-      <div class="detail-inner">${{h_blocks}}</div>
-      ${{intraweekHtml}}
-    </td>
-  </tr>`;
+  // Company meta bar
+  const ci = ticker.company_info || {{}};
+  const tags = [ci.sector, ci.industry].filter(Boolean);
+  const metaHtml = (ci.name || tags.length) ? `
+    <div class="ticker-meta">
+      ${{ci.name ? `<span class="ticker-meta-name">${{ci.name}}</span>` : ""}}
+      ${{tags.length ? `<div class="ticker-meta-tags">${{tags.map(t => `<span class="ticker-meta-tag">${{t}}</span>`).join("")}}</div>` : ""}}
+    </div>` : "";
+
+  return `${{metaHtml}}<div class="detail-inner">${{h_blocks}}</div>${{intraweekHtml}}`;
 }}
+
+const expandedTickers = new Set(); // persists across renders
 
 function renderTableBody(data) {{
   const tbody = document.getElementById("table-body");
@@ -932,23 +956,27 @@ function renderTableBody(data) {{
   }}
   document.getElementById("empty-state").style.display = "none";
 
-    tbody.innerHTML = data.map(t => `
-    <tr class="main-row" data-ticker="${{t.ticker}}">
+  // Render only main rows + empty detail placeholders (fast)
+  tbody.innerHTML = data.map(t => {{
+    const expanded = expandedTickers.has(t.ticker);
+    return `
+    <tr class="main-row${{expanded ? " expanded" : ""}}" data-ticker="${{t.ticker}}">
       <td><div class="ticker-cell"><span class="expand-icon">▶</span>${{t.ticker}}</div></td>
       <td class="price-cell">${{fmtPrice(t.price)}}</td>
       <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${{t.earnings_date ?? "—"}}</td>
       ${{HORIZONS.map(h => periodCell(t, h)).join("")}}
     </tr>
-    ${{renderDetailRow(t, colSpan)}}
-  `).join("");
+    <tr class="detail-row${{expanded ? " visible" : ""}}" id="detail-${{t.ticker}}">
+      <td class="detail-cell" colspan="${{colSpan}}"></td>
+    </tr>`;
+  }}).join("");
 
-  tbody.querySelectorAll(".main-row").forEach(row => {{
-    row.addEventListener("click", () => {{
-      const ticker = row.dataset.ticker;
-      const detailRow = document.getElementById(`detail-${{ticker}}`);
-      const expanded = detailRow.classList.toggle("visible");
-      row.classList.toggle("expanded", expanded);
-    }});
+  // Lazily populate content for already-expanded rows (usually 0-1, so fast)
+  expandedTickers.forEach(ticker => {{
+    const t = data.find(d => d.ticker === ticker);
+    if (!t) return;
+    const cell = document.querySelector(`#detail-${{ticker}} td`);
+    if (cell) cell.innerHTML = buildDetailCellContent(t);
   }});
 }}
 
@@ -982,6 +1010,29 @@ function render() {{
 }}
 
 // ---- Event wiring ----
+
+// Expand/collapse via event delegation — set up once, never re-attached
+document.getElementById("table-body").addEventListener("click", e => {{
+  const row = e.target.closest(".main-row");
+  if (!row) return;
+  const ticker = row.dataset.ticker;
+  const detailRow = document.getElementById(`detail-${{ticker}}`);
+  if (!detailRow) return;
+  const expanded = detailRow.classList.toggle("visible");
+  row.classList.toggle("expanded", expanded);
+  if (expanded) {{
+    expandedTickers.add(ticker);
+    const cell = detailRow.querySelector("td");
+    if (cell && !cell.innerHTML.trim()) {{
+      // First time opening — find ticker in full dataset (not just filtered view)
+      const t = RAW.tickers.find(d => d.ticker === ticker);
+      if (t) cell.innerHTML = buildDetailCellContent(t);
+    }}
+  }} else {{
+    expandedTickers.delete(ticker);
+  }}
+}});
+
 document.getElementById("period-pills").addEventListener("click", e => {{
   const btn = e.target.closest("[data-period]");
   if (!btn) return;
@@ -989,7 +1040,7 @@ document.getElementById("period-pills").addEventListener("click", e => {{
   btn.classList.add("active");
   state.period = btn.dataset.period;
   state.sortCol = null;
-  render();
+  requestAnimationFrame(render);
 }});
 
 document.getElementById("signal-pills").addEventListener("click", e => {{
@@ -998,7 +1049,7 @@ document.getElementById("signal-pills").addEventListener("click", e => {{
   document.querySelectorAll("[data-signal]").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   state.signal = btn.dataset.signal;
-  render();
+  requestAnimationFrame(render);
 }});
 
 document.getElementById("vol-pills").addEventListener("click", e => {{
@@ -1007,12 +1058,20 @@ document.getElementById("vol-pills").addEventListener("click", e => {{
   document.querySelectorAll("[data-minvol]").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   state.minVol = parseInt(btn.dataset.minvol, 10);
-  render();
+  // Re-render any open detail rows so dimming updates immediately
+  expandedTickers.forEach(ticker => {{
+    const t = RAW.tickers.find(d => d.ticker === ticker);
+    const cell = document.querySelector(`#detail-${{ticker}} td`);
+    if (t && cell) cell.innerHTML = buildDetailCellContent(t);
+  }});
+  requestAnimationFrame(render);
 }});
 
+let searchTimer = null;
 document.getElementById("search-input").addEventListener("input", e => {{
   state.search = e.target.value;
-  render();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => requestAnimationFrame(render), 150);
 }});
 
 // ---- Pill dates ----

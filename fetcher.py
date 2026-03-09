@@ -59,6 +59,22 @@ def get_options_chain(ticker_obj: yf.Ticker, ticker: str) -> tuple[list[str], di
         return [], {}
 
 
+def get_company_info(ticker_obj: yf.Ticker) -> dict:
+    """
+    Returns {name, sector, industry} from ticker.info.
+    All fields default to None on failure (best-effort, one extra HTTP call).
+    """
+    try:
+        info = ticker_obj.info
+        return {
+            "name":     info.get("longName") or info.get("shortName"),
+            "sector":   info.get("sector"),
+            "industry": info.get("industry"),
+        }
+    except Exception:
+        return {"name": None, "sector": None, "industry": None}
+
+
 def get_earnings_date(ticker_obj: yf.Ticker) -> Optional[str]:
     """
     Returns the next earnings date as an ISO string (YYYY-MM-DD), or None.
@@ -101,10 +117,12 @@ def fetch_all(tickers: list[str], delay: float = 0.6) -> dict:
             continue
 
         earnings_date = get_earnings_date(ticker_obj)
+        company_info  = get_company_info(ticker_obj)
         expirations, chains = get_options_chain(ticker_obj, ticker)
         results[ticker] = {
             "price": round(price, 2),
             "earnings_date": earnings_date,
+            "company_info": company_info,
             "expirations": expirations,
             "chains": chains,
         }

@@ -164,6 +164,7 @@ def analyze_ticker(
     expirations: list[str],
     chains: dict[str, pd.DataFrame],
     earnings_date: Optional[str] = None,
+    company_info: Optional[dict] = None,
     prev_horizons: Optional[dict] = None,
     today: Optional[date] = None,
 ) -> dict:
@@ -182,6 +183,7 @@ def analyze_ticker(
         "market": market,
         "price": price,
         "earnings_date": earnings_date,
+        "company_info": company_info or {"name": None, "sector": None, "industry": None},
         "horizons": {},
         "intraweek": [],
     }
@@ -305,6 +307,7 @@ def analyze_all(
             expirations=data.get("expirations", []),
             chains=data.get("chains", {}),
             earnings_date=data.get("earnings_date"),
+            company_info=data.get("company_info"),
             prev_horizons=prev_lookup.get(ticker),
             today=today,
         )
