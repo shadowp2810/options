@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 *.pyo
+.DS_Store
 
 # Ignore all generated report files inside reports/
 reports/*
