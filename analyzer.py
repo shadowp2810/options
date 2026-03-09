@@ -99,16 +99,16 @@ def find_nearest_expiry(expirations: list[str], target_date: date) -> Optional[s
 def classify_signal(opt_type: str, strike: float, current_price: float) -> str:
     """
     Returns the directional signal for a contract:
-    - OTM Call (strike > price)  → BUY   (bet on upside)
-    - OTM Put  (strike < price)  → SELL  (bet on downside)
-    - ITM Call (strike < price)  → HEDGE (already profitable call, likely covering)
-    - ITM Put  (strike > price)  → HEDGE (insurance on existing long position)
+    - OTM Call (strike > price)  → BUY    (bet on upside)
+    - OTM Put  (strike < price)  → SELL   (bet on downside)
+    - ITM Call (strike < price)  → HEDGE-C (smart money covering a profitable short)
+    - ITM Put  (strike > price)  → HEDGE-P (smart money insuring against further downside)
     - ATM (strike == price)      → BUY for calls, SELL for puts
     """
     if opt_type == "call":
-        return "BUY" if strike >= current_price else "HEDGE"
+        return "BUY" if strike >= current_price else "HEDGE-C"
     else:  # put
-        return "SELL" if strike <= current_price else "HEDGE"
+        return "SELL" if strike <= current_price else "HEDGE-P"
 
 
 def top_contracts(
@@ -247,12 +247,13 @@ def analyze_ticker(
                 else None
             )
             contract["prev_signal"] = prev_signal
+            is_hedge = lambda s: s in ("HEDGE-C", "HEDGE-P")
             contract["signal_flipped"] = (
                 prev_signal is not None
                 and curr_signal is not None
                 and prev_signal != curr_signal
-                and curr_signal != "HEDGE"
-                and prev_signal != "HEDGE"
+                and not is_hedge(curr_signal)
+                and not is_hedge(prev_signal)
             )
 
         result["horizons"][label] = {

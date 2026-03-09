@@ -158,6 +158,7 @@ def write_html(
   .pill.active.buy {{ background: var(--green); border-color: var(--green); }}
   .pill.active.sell {{ background: var(--red); border-color: var(--red); }}
   .pill.active.hedge {{ background: var(--orange); border-color: var(--orange); }}
+  .pill.active.hedge-p {{ background: var(--orange); border-color: var(--orange); }}
   .search-input {{
     padding: 6px 12px;
     border-radius: 20px;
@@ -196,6 +197,24 @@ def write_html(
   .chart-wrap {{ padding: 16px 18px; height: 280px; position: relative; }}
 
   /* ---- Table ---- */
+  .signal-legend {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    background: #13162a;
+  }}
+  .legend-item {{
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }}
+  .legend-item .badge {{ flex-shrink: 0; margin-top: 1px; }}
+  .legend-desc strong {{ color: var(--text); }}
   .table-wrap {{ overflow-x: auto; }}
   table {{
     width: 100%;
@@ -266,7 +285,8 @@ def write_html(
   }}
   .badge.buy {{ background: var(--green-bg); color: var(--green); border: 1px solid var(--green-dim); }}
   .badge.sell {{ background: var(--red-bg); color: var(--red); border: 1px solid var(--red-dim); }}
-  .badge.hedge {{ background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-dim); }}
+  .badge.hedge-c {{ background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-dim); }}
+  .badge.hedge-p {{ background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-dim); }}
   .badge.na {{ background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }}
 
   /* forecast % coloring */
@@ -500,7 +520,8 @@ def write_html(
       <button class="pill active" data-signal="all">All</button>
       <button class="pill buy" data-signal="BUY">BUY</button>
       <button class="pill sell" data-signal="SELL">SELL</button>
-      <button class="pill hedge" data-signal="HEDGE">HEDGE</button>
+      <button class="pill hedge" data-signal="HEDGE-C">HEDGE-C</button>
+      <button class="pill hedge-p" data-signal="HEDGE-P">HEDGE-P</button>
     </div>
   </div>
   <div class="control-group">
@@ -528,7 +549,7 @@ def write_html(
     <div class="card-header">
       <div>
         <div class="card-title" id="chart-title">Forecast % — 1 Day (Top-ranked contract per ticker)</div>
-        <div class="card-subtitle">Sorted highest gain → loss · Green = BUY · Red = SELL · Orange = HEDGE (ITM, likely institutional)</div>
+        <div class="card-subtitle">Sorted highest gain → loss · Green = BUY · Red = SELL · Orange = HEDGE-C (ITM Call) · Purple = HEDGE-P (ITM Put)</div>
       </div>
     </div>
     <div class="chart-wrap">
@@ -539,6 +560,24 @@ def write_html(
   <div class="card">
     <div class="card-header">
       <div class="card-title">All Tickers</div>
+    </div>
+    <div class="signal-legend">
+      <div class="legend-item">
+        <span class="badge buy">BUY</span>
+        <span class="legend-desc"><strong>OTM Call</strong> — market betting the stock goes up</span>
+      </div>
+      <div class="legend-item">
+        <span class="badge sell">SELL</span>
+        <span class="legend-desc"><strong>OTM Put</strong> — market betting the stock goes down</span>
+      </div>
+      <div class="legend-item">
+        <span class="badge hedge-c">HEDGE-C</span>
+        <span class="legend-desc"><strong>ITM Call</strong> — smart money covering a profitable short position</span>
+      </div>
+      <div class="legend-item">
+        <span class="badge hedge-p">HEDGE-P</span>
+        <span class="legend-desc"><strong>ITM Put</strong> — smart money insuring against further downside on a stock they hold</span>
+      </div>
     </div>
     <div class="table-wrap">
       <table id="main-table">
@@ -591,7 +630,8 @@ function fmtVol(v) {{
 }}
 function badge(signal) {{
   if (!signal) return '<span class="badge na">N/A</span>';
-  const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "hedge";
+  const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell"
+    : signal === "HEDGE-C" ? "hedge-c" : signal === "HEDGE-P" ? "hedge-p" : "na";
   return `<span class="badge ${{cls}}">${{signal}}</span>`;
 }}
 
@@ -627,7 +667,8 @@ function getVisible() {{
   let data = RAW.tickers.filter(t => {{
     const c = getTopContract(t, state.period);
     if (state.signal !== "all") {{
-      if (!c || c.signal !== state.signal) return false;
+      const sig = c ? c.signal : null;
+      if (!sig || sig !== state.signal) return false;
     }}
     if (state.search) {{
       if (!t.ticker.toLowerCase().includes(state.search.toLowerCase())) return false;
@@ -673,7 +714,8 @@ function renderChart(data) {{
     if (!c || !c.signal) return "rgba(100,116,139,0.5)";
     if (c.signal === "BUY")   return "rgba(34,197,94,0.75)";
     if (c.signal === "SELL")  return "rgba(239,68,68,0.75)";
-    if (c.signal === "HEDGE") return "rgba(249,115,22,0.75)";
+    if (c.signal === "HEDGE-C") return "rgba(249,115,22,0.75)";
+    if (c.signal === "HEDGE-P") return "rgba(249,115,22,0.75)";
     return "rgba(100,116,139,0.5)";
   }});
   const borderColors = colors.map(c => c.replace("0.75", "1").replace("0.5", "0.9"));
@@ -917,8 +959,8 @@ function updateStats(data) {{
       const contracts = t.horizons[h]?.contracts ?? [];
       contracts.forEach(c => {{
         if (c?.signal === "BUY")   buy++;
-        else if (c?.signal === "SELL")  sell++;
-        else if (c?.signal === "HEDGE") hedge++;
+        else if (c?.signal === "SELL")   sell++;
+        else if (c?.signal === "HEDGE-C" || c?.signal === "HEDGE-P") hedge++;
       }});
     }});
   }});

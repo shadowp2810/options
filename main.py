@@ -135,7 +135,7 @@ def write_detail_sheet(ws, rows: list[dict]):
                 elif val == "SELL":
                     cell.fill = RED_FILL
                     cell.font = Font(color="9C0006", bold=True)
-                elif val == "HEDGE":
+                elif val in ("HEDGE-C", "HEDGE-P"):
                     cell.fill = ORANGE_FILL
                     cell.font = ORANGE_FONT
             elif col_name == "Forecast %":
@@ -306,7 +306,7 @@ def write_summary_sheet(ws, analyzed: list[dict]):
                 elif signal == "SELL":
                     c.fill = RED_FILL
                     c.font = Font(color="9C0006", bold=True)
-                elif signal == "HEDGE":
+                elif signal in ("HEDGE-C", "HEDGE-P"):
                     c.fill = ORANGE_FILL
                     c.font = Font(color="833C00", bold=True)
                 else:
@@ -462,14 +462,14 @@ def main():
     # Quick stats
     total_buy     = sum(1 for r in detail_rows if r["Signal"] == "BUY")
     total_sell    = sum(1 for r in detail_rows if r["Signal"] == "SELL")
-    total_hedge   = sum(1 for r in detail_rows if r["Signal"] == "HEDGE")
+    total_hedge   = sum(1 for r in detail_rows if r["Signal"] in ("HEDGE-C", "HEDGE-P"))
     total_na      = sum(1 for r in detail_rows if r["Signal"] is None)
     total_flipped = sum(1 for r in detail_rows if r["Signal Flipped"] == "YES")
     earnings_hits = sum(1 for r in detail_rows if r["⚠️ Earnings"] == "YES")
     print(f"\nSignal breakdown across all tickers/horizons/ranks:")
     print(f"  BUY:            {total_buy}")
     print(f"  SELL:           {total_sell}")
-    print(f"  HEDGE:          {total_hedge}  (ITM — likely institutional hedges)")
+    print(f"  HEDGE-C/P:      {total_hedge}  (ITM — likely institutional hedges)")
     print(f"  N/A:            {total_na}")
     print(f"  Signal flips:   {total_flipped}  (signal changed vs previous run)")
     print(f"  Earnings flags: {earnings_hits}  (earnings within horizon window)")
