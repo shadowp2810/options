@@ -54,7 +54,7 @@ LEFT         = Alignment(horizontal="left", vertical="center")
 THIN = Side(style="thin", color="BFBFBF")
 THIN_BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
-HORIZONS_ORDER = list(HORIZONS.keys())  # ["7d","30d","45d","60d","90d","180d","1y"]
+HORIZONS_ORDER = list(HORIZONS.keys())  # ["fri","7d","30d","45d","60d","90d","180d","1y"]
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +212,7 @@ def write_summary_sheet(ws, analyzed: list[dict]):
     ws.merge_cells(start_row=1, start_column=2, end_row=2, end_column=2)
 
     horizon_label_map = {
+        "fri":  "This Friday",
         "7d":   "7 Days",
         "30d":  "1 Month",
         "45d":  "45 Days",

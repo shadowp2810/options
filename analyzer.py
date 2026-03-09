@@ -8,7 +8,8 @@ from datetime import date, timedelta
 import pandas as pd
 from typing import Optional
 
-HORIZONS: dict[str, int] = {
+HORIZONS: dict[str, int | None] = {
+    "fri":  None,  # special: nearest Friday that hasn't expired yet
     "7d":   7,
     "30d":  30,
     "45d":  45,
@@ -18,14 +19,49 @@ HORIZONS: dict[str, int] = {
     "1y":   365,
 }
 
+
+def next_friday(today: date) -> date:
+    """
+    Returns the next Friday from today that options haven't expired on yet.
+    Since we run at/after market close, Friday itself is treated as expired —
+    so on Fridays we target the following Friday (7 days out).
+    """
+    days_until = (4 - today.weekday()) % 7  # 0 if today is Friday
+    if days_until == 0:
+        days_until = 7  # today is Friday, options already expired at close
+    return today + timedelta(days=days_until)
+
 TOP_N = 3
 MAX_EXPIRY_BUFFER_DAYS = 10  # how far past target we'll look for a valid expiry
 
 
+def find_intraweek_expiries(expirations: list[str], today: date) -> list[str]:
+    """
+    Returns Mon/Tue/Wed/Thu expiry dates strictly between today and the next Friday.
+    These intra-week expiries only exist on hyper-liquid stocks (AAPL, NVDA, TSLA…).
+    """
+    friday = next_friday(today)
+    result = []
+    for exp_str in expirations:
+        try:
+            exp_date = date.fromisoformat(exp_str)
+        except ValueError:
+            continue
+        if today < exp_date < friday and exp_date.weekday() != 4:
+            result.append(exp_str)
+    result.sort()
+    return result
+
+
 def find_nearest_expiry(expirations: list[str], target_date: date) -> Optional[str]:
     """
-    Returns the nearest expiry date string that is >= target_date,
-    within MAX_EXPIRY_BUFFER_DAYS of target. Returns None if none found.
+    Returns the nearest Friday expiry date string that is >= target_date,
+    within MAX_EXPIRY_BUFFER_DAYS of target.
+
+    Filters to Fridays only (weekday == 4) so that Mon/Wed intra-week expiries
+    available on hyper-liquid stocks (AAPL, NVDA, TSLA, etc.) are excluded.
+    Falls back to any Friday >= target if none found within the buffer.
+    Returns None if no Friday expiry exists at all.
     """
     cutoff = target_date + timedelta(days=MAX_EXPIRY_BUFFER_DAYS)
     candidates = []
@@ -34,16 +70,20 @@ def find_nearest_expiry(expirations: list[str], target_date: date) -> Optional[s
             exp_date = date.fromisoformat(exp_str)
         except ValueError:
             continue
+        if exp_date.weekday() != 4:  # skip non-Fridays
+            continue
         if target_date <= exp_date <= cutoff:
             candidates.append((exp_date, exp_str))
 
     if not candidates:
-        # relax: just take the nearest expiry >= target (no buffer limit)
+        # relax buffer: nearest Friday >= target, no distance limit
         all_future = []
         for exp_str in expirations:
             try:
                 exp_date = date.fromisoformat(exp_str)
             except ValueError:
+                continue
+            if exp_date.weekday() != 4:
                 continue
             if exp_date >= target_date:
                 all_future.append((exp_date, exp_str))
@@ -143,6 +183,7 @@ def analyze_ticker(
         "price": price,
         "earnings_date": earnings_date,
         "horizons": {},
+        "intraweek": [],
     }
 
     empty_contract = {
@@ -170,7 +211,7 @@ def analyze_ticker(
             pass
 
     for label, days in HORIZONS.items():
-        target_date = today + timedelta(days=days)
+        target_date = next_friday(today) if days is None else today + timedelta(days=days)
         expiry = find_nearest_expiry(expirations, target_date)
 
         # Earnings flag: is there an earnings date between today and this expiry?
@@ -219,6 +260,17 @@ def analyze_ticker(
             "earnings_in_window": earnings_in_window,
             "contracts": contracts,
         }
+
+    # Intra-week expiries (Mon–Thu) for hyper-liquid stocks
+    for exp_str in find_intraweek_expiries(expirations, today):
+        if exp_str in chains:
+            iw_contracts = top_contracts(chains[exp_str], price)
+            exp_date = date.fromisoformat(exp_str)
+            result["intraweek"].append({
+                "expiry": exp_str,
+                "day": exp_date.strftime("%A"),
+                "contracts": iw_contracts,
+            })
 
     return result
 

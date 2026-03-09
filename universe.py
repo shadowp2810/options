@@ -10,9 +10,9 @@ India: Nifty 100 (Nifty 50 + Nifty Next 50) via NSE (.NS suffix)
 SP500_IT = [
     "AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "QCOM", "TXN", "AMAT",
     "ACN", "IBM", "INTU", "MU", "LRCX", "ADI", "KLAC", "SNPS", "CDNS", "MRVL",
-    "MSI", "FTNT", "ANSS", "ADSK", "TEL", "APH", "MPWR", "GEN", "CTSH", "IT",
+    "MSI", "FTNT", "ADSK", "TEL", "APH", "MPWR", "GEN", "CTSH", "IT",
     "KEYS", "AKAM", "ZBRA", "TDY", "ENPH", "TER", "SWKS", "QRVO", "FFIV", "EPAM",
-    "JNPR", "NTAP", "HPE", "GLW", "STX", "WDC", "CSCO", "ANET", "PANW", "FSLR",
+    "NTAP", "HPE", "GLW", "STX", "WDC", "CSCO", "ANET", "PANW", "FSLR",
     "NOW", "TTWO", "EA", "PAYC", "VRSN", "LDOS", "SAIC", "DXC", "HPQ",
     "CDW", "GDDY", "PTC", "JKHY", "TRMB", "PCTY", "NSIT",
 ]
@@ -30,7 +30,7 @@ NASDAQ_100 = [
     "VRSK", "CRWD", "TEAM", "ZS", "ADSK", "MCHP", "CSX", "EA", "CEG", "BIIB",
     "WBD", "IDXX", "FANG", "EXC", "XEL", "GEHC", "KHC", "TTWO", "ON", "GFS",
     "DLTR", "ILMN", "SIRI", "ZM", "LCID", "DDOG", "OKTA", "RIVN", "RGEN", "NTES",
-    "ANSS", "ALGN", "CDW", "HOLX", "MTCH", "SWKS", "INCY", "WBA", "PDD",
+    "ALGN", "CDW", "HOLX", "MTCH", "SWKS", "INCY", "PDD",
 ]
 
 # ---------------------------------------------------------------------------

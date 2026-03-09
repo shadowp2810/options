@@ -10,6 +10,7 @@ from analyzer import HORIZONS, TOP_N
 
 HORIZONS_ORDER = list(HORIZONS.keys())
 HORIZON_LABELS = {
+    "fri":  "This Friday",
     "7d":   "7 Days",
     "30d":  "1 Month",
     "45d":  "45 Days",
@@ -133,6 +134,14 @@ def write_html(
   .control-group {{ display: flex; align-items: center; gap: 6px; }}
   .control-group label {{ color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }}
   .pill-group {{ display: flex; gap: 3px; }}
+  .pill-date {{ display: block; font-size: 0.65rem; opacity: 0.72; font-weight: 400; line-height: 1.1; margin-top: 1px; }}
+  .intraweek-section {{ margin-top: 14px; border-top: 1px dashed #2e3250; padding-top: 10px; padding-bottom: 6px; }}
+  .intraweek-header {{ font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #818cf8; margin-bottom: 8px; }}
+  .intraweek-blocks {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+  .intraweek-block {{ background: #13162a; border: 1px solid #2a2d4a; border-radius: 8px; padding: 8px 10px; min-width: 160px; flex: 0 0 auto; }}
+  .intraweek-block-header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
+  .intraweek-day {{ font-size: 11px; font-weight: 700; color: #818cf8; }}
+  .intraweek-expiry {{ font-size: 10px; color: var(--text-dim); }}
   .pill {{
     padding: 5px 13px;
     border-radius: 20px;
@@ -274,6 +283,7 @@ def write_html(
     border-left: 1px solid var(--border);
     padding: 8px 12px;
   }}
+  .th-date {{ display: block; font-size: 10px; font-weight: 400; color: var(--text-dim); margin-top: 2px; opacity: 0.8; }}
   td.period-cell {{ border-left: 1px solid var(--border); }}
 
   /* ---- Expanded detail rows ---- */
@@ -414,6 +424,7 @@ def write_html(
   <div class="control-group">
     <label>Period</label>
     <div class="pill-group" id="period-pills">
+      <button class="pill" data-period="fri">This Friday</button>
       <button class="pill active" data-period="7d">7 Days</button>
       <button class="pill" data-period="30d">1 Month</button>
       <button class="pill" data-period="45d">45 Days</button>
@@ -475,8 +486,8 @@ def write_html(
 
 <script>
 const RAW = {data_payload};
-const HORIZONS = ["7d","30d","45d","60d","90d","180d","1y"];
-const HORIZON_LABELS = {{"7d":"7 Days","30d":"1 Month","45d":"45 Days","60d":"60 Days","90d":"90 Days","180d":"6 Months","1y":"1 Year"}};
+const HORIZONS = ["fri","7d","30d","45d","60d","90d","180d","1y"];
+const HORIZON_LABELS = {{"fri":"This Friday","7d":"7 Days","30d":"1 Month","45d":"45 Days","60d":"60 Days","90d":"90 Days","180d":"6 Months","1y":"1 Year"}};
 const TOP_N = {TOP_N};
 
 let state = {{
@@ -488,6 +499,7 @@ let state = {{
 }};
 
 let chartInstance = null;
+const horizonDates = {{}}; // populated by initPillDates(), reused in renderTableHead
 
 // ---- Helpers ----
 function fmt(v) {{
@@ -674,6 +686,7 @@ function renderTableHead() {{
     ${{HORIZONS.map(h => `
       <th class="th-horizon ${{state.sortCol === "pct_" + h ? "sorted" : ""}}" data-sort="pct_${{h}}">
         ${{HORIZON_LABELS[h]}} ${{sortIcon("pct_" + h)}}
+        ${{horizonDates[h] ? `<span class="th-date">${{new Date(horizonDates[h] + "T12:00:00").toLocaleDateString("en-US", {{month:"short",day:"numeric"}})}}</span>` : ""}}
       </th>`).join("")}}
   </tr>`;
 
@@ -741,9 +754,51 @@ function renderDetailRow(ticker, colSpan) {{
     </div>`;
   }}).join("");
 
+  // Intra-week section (Mon/Wed/Thu, only for hyper-liquid stocks)
+  let intraweekHtml = "";
+  const iw = ticker.intraweek || [];
+  if (iw.length > 0) {{
+    const iwBlocks = iw.map(entry => {{
+      const rankClasses = ["r1", "r2", "r3"];
+      const rows = entry.contracts.map((c, i) => {{
+        if (!c || !c.signal) return `
+          <div class="rank-row">
+            <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+            <div class="rank-detail"><span class="pct na">N/A</span></div>
+          </div>`;
+        const moneynessLabel = c.moneyness
+          ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>`
+          : "";
+        return `
+          <div class="rank-row">
+            <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+            <div class="rank-detail">
+              <span class="rank-strike">$${{c.strike ?? "—"}}</span>
+              ${{moneynessLabel}}
+              ${{badge(c.signal)}}
+              ${{fmt(c.forecast_pct)}}
+              <span class="rank-vol">Vol: ${{fmtVol(c.volume)}}</span>
+            </div>
+          </div>`;
+      }}).join("");
+      return `<div class="intraweek-block">
+        <div class="intraweek-block-header">
+          <span class="intraweek-day">${{entry.day}}</span>
+          <span class="intraweek-expiry">${{entry.expiry}}</span>
+        </div>
+        ${{rows}}
+      </div>`;
+    }}).join("");
+    intraweekHtml = `<div class="intraweek-section">
+      <div class="intraweek-header">⚡ Intra-week Expiries</div>
+      <div class="intraweek-blocks">${{iwBlocks}}</div>
+    </div>`;
+  }}
+
   return `<tr class="detail-row" id="detail-${{ticker.ticker}}">
     <td class="detail-cell" colspan="${{colSpan}}">
       <div class="detail-inner">${{h_blocks}}</div>
+      ${{intraweekHtml}}
     </td>
   </tr>`;
 }}
@@ -833,7 +888,34 @@ document.getElementById("search-input").addEventListener("input", e => {{
   render();
 }});
 
+// ---- Pill dates ----
+function initPillDates() {{
+  // Populate module-level horizonDates: first non-null expiry per horizon
+  (RAW.tickers || []).forEach(t => {{
+    HORIZONS.forEach(h => {{
+      if (!horizonDates[h]) {{
+        const expiry = t.horizons?.[h]?.expiry;
+        if (expiry) horizonDates[h] = expiry;
+      }}
+    }});
+  }});
+
+  document.querySelectorAll("[data-period]").forEach(btn => {{
+    const h = btn.dataset.period;
+    const expiry = horizonDates[h];
+    const label = HORIZON_LABELS[h] || h;
+    if (expiry) {{
+      const d = new Date(expiry + "T12:00:00");
+      const dateStr = d.toLocaleDateString("en-US", {{ month: "short", day: "numeric" }});
+      btn.innerHTML = `${{label}}<span class="pill-date">${{dateStr}}</span>`;
+    }} else {{
+      btn.textContent = label;
+    }}
+  }});
+}}
+
 // ---- Init ----
+initPillDates();
 render();
 </script>
 </body>
