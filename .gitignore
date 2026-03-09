@@ -2,8 +2,11 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Generated reports (local only — docs/index.html is the deployed version)
-reports/
+# Ignore all generated report files inside reports/
+reports/*
+
+# Keep the delta snapshot so GitHub Actions carries it between daily runs
+!reports/latest_analysis.json
 
 # docs/ is intentionally tracked (contains CNAME + deployed index.html)
 !docs/

@@ -59,10 +59,35 @@ def get_options_chain(ticker_obj: yf.Ticker, ticker: str) -> tuple[list[str], di
         return [], {}
 
 
+def get_earnings_date(ticker_obj: yf.Ticker) -> Optional[str]:
+    """
+    Returns the next earnings date as an ISO string (YYYY-MM-DD), or None.
+    yfinance returns calendar as a dict with an 'Earnings Date' key.
+    """
+    try:
+        cal = ticker_obj.calendar
+        if not cal:
+            return None
+        earnings = cal.get("Earnings Date")
+        if earnings is None:
+            return None
+        # May be a list of dates or a single value
+        if isinstance(earnings, (list, tuple)) and len(earnings) > 0:
+            d = earnings[0]
+        else:
+            d = earnings
+        if hasattr(d, "date"):
+            return str(d.date())
+        return str(d)[:10]  # trim to YYYY-MM-DD if already a string
+    except Exception:
+        return None
+
+
 def fetch_all(tickers: list[str], delay: float = 0.6) -> dict:
     """
-    Fetches price + options chain for each ticker.
-    Returns a dict: ticker -> {"price": float, "expirations": [...], "chains": {...}}
+    Fetches price, earnings date, and options chain for each ticker.
+    Returns a dict: ticker -> {"price": float, "earnings_date": str|None,
+                                "expirations": [...], "chains": {...}}
     """
     results = {}
     total = len(tickers)
@@ -70,13 +95,16 @@ def fetch_all(tickers: list[str], delay: float = 0.6) -> dict:
         print(f"[{i}/{total}] Fetching {ticker}...")
         price, ticker_obj = get_stock_data(ticker)
         if price is None or ticker_obj is None:
-            results[ticker] = {"price": None, "expirations": [], "chains": {}}
+            results[ticker] = {"price": None, "earnings_date": None,
+                               "expirations": [], "chains": {}}
             time.sleep(delay)
             continue
 
+        earnings_date = get_earnings_date(ticker_obj)
         expirations, chains = get_options_chain(ticker_obj, ticker)
         results[ticker] = {
             "price": round(price, 2),
+            "earnings_date": earnings_date,
             "expirations": expirations,
             "chains": chains,
         }

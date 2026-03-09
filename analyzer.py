@@ -1,6 +1,7 @@
 """
 Analyzes options chains to find top 3 highest-volume contracts
-for each target horizon. Computes buy/sell signal and forecasted % move.
+for each target horizon. Computes buy/sell signal, forecasted % move,
+earnings-in-window flag, and delta vs the previous run.
 """
 
 from datetime import date, timedelta
@@ -122,47 +123,127 @@ def analyze_ticker(
     price: Optional[float],
     expirations: list[str],
     chains: dict[str, pd.DataFrame],
+    earnings_date: Optional[str] = None,
+    prev_horizons: Optional[dict] = None,
     today: Optional[date] = None,
 ) -> dict:
     """
     For each horizon, finds the nearest expiry and top-3 contracts.
+    Adds earnings_in_window flag and delta vs previous run per contract.
     Returns a structured dict ready for export.
     """
     if today is None:
         today = date.today()
 
-    result = {"ticker": ticker, "price": price, "horizons": {}}
+    market = "IN" if ticker.endswith(".NS") or ticker.endswith(".BO") else "US"
+
+    result = {
+        "ticker": ticker,
+        "market": market,
+        "price": price,
+        "earnings_date": earnings_date,
+        "horizons": {},
+    }
+
+    empty_contract = {
+        "strike": None, "type": None, "volume": None,
+        "signal": None, "moneyness": None, "forecast_pct": None,
+        "prev_strike": None, "strike_delta": None,
+        "prev_signal": None, "signal_flipped": False,
+    }
 
     if price is None or not expirations:
         for label in HORIZONS:
             result["horizons"][label] = {
                 "expiry": None,
-                "contracts": [{"strike": None, "type": None, "volume": None,
-                                "signal": None, "moneyness": None, "forecast_pct": None}] * TOP_N,
+                "earnings_in_window": False,
+                "contracts": [dict(empty_contract)] * TOP_N,
             }
         return result
+
+    # Parse earnings date once
+    parsed_earnings: Optional[date] = None
+    if earnings_date:
+        try:
+            parsed_earnings = date.fromisoformat(earnings_date)
+        except ValueError:
+            pass
 
     for label, days in HORIZONS.items():
         target_date = today + timedelta(days=days)
         expiry = find_nearest_expiry(expirations, target_date)
 
+        # Earnings flag: is there an earnings date between today and this expiry?
+        earnings_in_window = False
+        if parsed_earnings and expiry:
+            try:
+                expiry_date = date.fromisoformat(expiry)
+                earnings_in_window = today < parsed_earnings <= expiry_date
+            except ValueError:
+                pass
+
         if expiry is None or expiry not in chains:
-            contracts = [{"strike": None, "type": None, "volume": None,
-                          "signal": None, "moneyness": None, "forecast_pct": None}] * TOP_N
+            contracts = [dict(empty_contract)] * TOP_N
         else:
             contracts = top_contracts(chains[expiry], price)
 
-        result["horizons"][label] = {"expiry": expiry, "contracts": contracts}
+        # Attach delta vs previous run
+        prev_contracts = []
+        if prev_horizons and label in prev_horizons:
+            prev_contracts = prev_horizons[label].get("contracts", [])
+
+        for rank_idx, contract in enumerate(contracts):
+            prev = prev_contracts[rank_idx] if rank_idx < len(prev_contracts) else None
+            prev_strike = prev.get("strike") if prev else None
+            prev_signal = prev.get("signal") if prev else None
+            curr_strike = contract.get("strike")
+            curr_signal = contract.get("signal")
+
+            contract["prev_strike"] = prev_strike
+            contract["strike_delta"] = (
+                round(curr_strike - prev_strike, 2)
+                if curr_strike is not None and prev_strike is not None
+                else None
+            )
+            contract["prev_signal"] = prev_signal
+            contract["signal_flipped"] = (
+                prev_signal is not None
+                and curr_signal is not None
+                and prev_signal != curr_signal
+                and curr_signal != "HEDGE"
+                and prev_signal != "HEDGE"
+            )
+
+        result["horizons"][label] = {
+            "expiry": expiry,
+            "earnings_in_window": earnings_in_window,
+            "contracts": contracts,
+        }
 
     return result
 
 
-def analyze_all(fetch_results: dict) -> list[dict]:
+def analyze_all(
+    fetch_results: dict,
+    prev_data: Optional[list] = None,
+    suppress_delta: bool = False,
+) -> list[dict]:
     """
     Runs analyze_ticker on every ticker in fetch_results.
+    prev_data: list of analysis dicts from the previous run (for delta computation).
+    suppress_delta: if True, skip delta computation (snapshot too old).
     Returns a list of analysis dicts.
     """
     today = date.today()
+
+    # Build previous-run lookup: ticker -> horizons dict
+    prev_lookup: dict[str, dict] = {}
+    if prev_data and not suppress_delta:
+        for item in prev_data:
+            t = item.get("ticker")
+            if t:
+                prev_lookup[t] = item.get("horizons", {})
+
     analyzed = []
     for ticker, data in fetch_results.items():
         row = analyze_ticker(
@@ -170,6 +251,8 @@ def analyze_all(fetch_results: dict) -> list[dict]:
             price=data.get("price"),
             expirations=data.get("expirations", []),
             chains=data.get("chains", {}),
+            earnings_date=data.get("earnings_date"),
+            prev_horizons=prev_lookup.get(ticker),
             today=today,
         )
         analyzed.append(row)

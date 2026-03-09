@@ -20,11 +20,35 @@ HORIZON_LABELS = {
 }
 
 
-def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
+def write_html(
+    analyzed: list[dict],
+    output_path: Path,
+    timestamp: str,
+    snapshot_info: dict | None = None,
+) -> None:
+    if snapshot_info is None:
+        snapshot_info = {}
+
     data_payload = json.dumps(
         {"generated": timestamp, "tickers": analyzed},
         default=str,
     )
+
+    # Build the delta context string shown in the header
+    age_days = snapshot_info.get("age_days")
+    suppressed = snapshot_info.get("suppressed", False)
+    snap_generated = snapshot_info.get("generated")
+
+    if suppressed:
+        delta_context = f'<span class="delta-stale">⚠ Δ suppressed — snapshot is {age_days}d old (limit: {snapshot_info.get("max_age", 3)}d)</span>'
+    elif age_days is None:
+        delta_context = '<span class="delta-none">Δ no previous snapshot</span>'
+    elif age_days == 0:
+        delta_context = '<span class="delta-fresh">Δ vs earlier today</span>'
+    elif age_days == 1:
+        delta_context = '<span class="delta-fresh">Δ vs yesterday</span>'
+    else:
+        delta_context = f'<span class="delta-fresh">Δ vs {age_days} days ago</span>'
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -321,6 +345,49 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
   }}
   .empty-state p {{ margin-top: 8px; font-size: 12px; }}
 
+  /* ---- Earnings warning ---- */
+  .earnings-badge {{
+    display: inline-flex; align-items: center; gap: 3px;
+    background: #2d1f00; color: #f59e0b;
+    border: 1px solid #78450044; border-radius: 4px;
+    padding: 1px 6px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.3px;
+  }}
+
+  /* ---- Delta indicators ---- */
+  .delta {{
+    font-size: 10px; font-weight: 600;
+    padding: 1px 5px; border-radius: 3px;
+    white-space: nowrap;
+  }}
+  .delta.up {{ color: var(--green); background: var(--green-bg); }}
+  .delta.down {{ color: var(--red); background: var(--red-bg); }}
+  .delta.flat {{ color: var(--text-dim); }}
+
+  /* ---- Snapshot age labels ---- */
+  .delta-fresh {{
+    font-size: 11px; font-weight: 600; color: var(--green);
+    background: var(--green-bg); border: 1px solid var(--green-dim);
+    border-radius: 4px; padding: 2px 8px;
+  }}
+  .delta-stale {{
+    font-size: 11px; font-weight: 600; color: var(--yellow);
+    background: #2d1f00; border: 1px solid #78450044;
+    border-radius: 4px; padding: 2px 8px;
+  }}
+  .delta-none {{
+    font-size: 11px; color: var(--text-dim);
+    border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px;
+  }}
+
+  /* ---- Signal flip alert ---- */
+  .flip-badge {{
+    display: inline-flex; align-items: center; gap: 3px;
+    background: #1a0a2e; color: #a78bfa;
+    border: 1px solid #4c1d9544; border-radius: 4px;
+    padding: 1px 6px; font-size: 10px; font-weight: 700;
+  }}
+
   /* ---- Scrollbar ---- */
   ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
   ::-webkit-scrollbar-track {{ background: var(--bg); }}
@@ -331,9 +398,9 @@ def write_html(analyzed: list[dict], output_path: Path, timestamp: str) -> None:
 <body>
 
 <div class="header">
-  <div class="header-left">
+    <div class="header-left">
     <h1>Options <span>Volume Signal</span> Dashboard</h1>
-    <p>Generated: {timestamp} &nbsp;·&nbsp; S&amp;P 500 IT + Nasdaq-100</p>
+    <p>Generated: {timestamp} &nbsp;·&nbsp; S&amp;P 500 IT + Nasdaq-100 &nbsp;·&nbsp; {delta_context}</p>
   </div>
   <div class="header-stats">
     <div class="stat"><div class="stat-val buy" id="stat-buy">—</div><div class="stat-lbl">Buy Signals</div></div>
@@ -441,6 +508,24 @@ function badge(signal) {{
   if (!signal) return '<span class="badge na">N/A</span>';
   const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "hedge";
   return `<span class="badge ${{cls}}">${{signal}}</span>`;
+}}
+
+function earningsBadge(inWindow, earningsDate) {{
+  if (!inWindow) return "";
+  const label = earningsDate ? `⚠ Earnings ${{earningsDate}}` : "⚠ Earnings";
+  return `<span class="earnings-badge">${{label}}</span>`;
+}}
+
+function deltaBadge(c) {{
+  if (c.strike_delta == null || c.prev_strike == null) return "";
+  const sign = c.strike_delta > 0 ? "+" : "";
+  const cls  = c.strike_delta > 0 ? "up" : c.strike_delta < 0 ? "down" : "flat";
+  return `<span class="delta ${{cls}}" title="Was $${{c.prev_strike}}">${{sign}}$${{c.strike_delta.toFixed(2)}}</span>`;
+}}
+
+function flipBadge(c) {{
+  if (!c.signal_flipped || !c.prev_signal) return "";
+  return `<span class="flip-badge">↺ ${{c.prev_signal}}→${{c.signal}}</span>`;
 }}
 function getTopContract(ticker, period) {{
   const h = ticker.horizons[period];
@@ -585,6 +670,7 @@ function renderTableHead() {{
   thead.innerHTML = `<tr>
     <th class="${{state.sortCol === "ticker" ? "sorted" : ""}}" data-sort="ticker">Ticker ${{sortIcon("ticker")}}</th>
     <th class="${{state.sortCol === "price" ? "sorted" : ""}}" data-sort="price">Price ${{sortIcon("price")}}</th>
+    <th>Earnings</th>
     ${{HORIZONS.map(h => `
       <th class="th-horizon ${{state.sortCol === "pct_" + h ? "sorted" : ""}}" data-sort="pct_${{h}}">
         ${{HORIZON_LABELS[h]}} ${{sortIcon("pct_" + h)}}
@@ -606,15 +692,22 @@ function renderTableHead() {{
 }}
 
 function periodCell(ticker, period) {{
+  const h = ticker.horizons[period];
   const c = getTopContract(ticker, period);
-  if (!c || !c.signal) return `<td class="period-cell"><span class="pct na">N/A</span></td>`;
-  return `<td class="period-cell">${{badge(c.signal)}} ${{fmt(c.forecast_pct)}}</td>`;
+  const ew = h ? h.earnings_in_window : false;
+  if (!c || !c.signal) return `<td class="period-cell">${{earningsBadge(ew, ticker.earnings_date)}}<span class="pct na">N/A</span></td>`;
+  return `<td class="period-cell">
+    ${{earningsBadge(ew, ticker.earnings_date)}}
+    ${{badge(c.signal)}} ${{fmt(c.forecast_pct)}}
+    ${{flipBadge(c)}}
+  </td>`;
 }}
 
 function renderDetailRow(ticker, colSpan) {{
   const h_blocks = HORIZONS.map(h => {{
     const hData = ticker.horizons[h];
     const expiry = hData ? hData.expiry : null;
+    const earningsInWin = hData ? hData.earnings_in_window : false;
     const contracts = hData ? hData.contracts : [];
     const rankClasses = ["r1", "r2", "r3"];
     const rankRows = contracts.map((c, i) => {{
@@ -632,6 +725,8 @@ function renderDetailRow(ticker, colSpan) {{
             ${{moneynessLabel}}
             ${{badge(c.signal)}}
             ${{fmt(c.forecast_pct)}}
+            ${{deltaBadge(c)}}
+            ${{flipBadge(c)}}
             <span class="rank-vol">Vol: ${{fmtVol(c.volume)}}</span>
           </div>
         </div>`;
@@ -639,7 +734,7 @@ function renderDetailRow(ticker, colSpan) {{
 
     return `<div class="horizon-block">
       <div class="horizon-block-header">
-        <span>${{HORIZON_LABELS[h]}}</span>
+        <span>${{HORIZON_LABELS[h]}} ${{earningsBadge(earningsInWin, ticker.earnings_date)}}</span>
         <span class="expiry">${{expiry ?? "N/A"}}</span>
       </div>
       ${{rankRows}}
@@ -655,7 +750,7 @@ function renderDetailRow(ticker, colSpan) {{
 
 function renderTableBody(data) {{
   const tbody = document.getElementById("table-body");
-  const colSpan = 2 + HORIZONS.length;
+  const colSpan = 3 + HORIZONS.length;
 
   if (data.length === 0) {{
     tbody.innerHTML = "";
@@ -664,10 +759,11 @@ function renderTableBody(data) {{
   }}
   document.getElementById("empty-state").style.display = "none";
 
-  tbody.innerHTML = data.map(t => `
+    tbody.innerHTML = data.map(t => `
     <tr class="main-row" data-ticker="${{t.ticker}}">
       <td><div class="ticker-cell"><span class="expand-icon">▶</span>${{t.ticker}}</div></td>
       <td class="price-cell">${{fmtPrice(t.price)}}</td>
+      <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${{t.earnings_date ?? "—"}}</td>
       ${{HORIZONS.map(h => periodCell(t, h)).join("")}}
     </tr>
     ${{renderDetailRow(t, colSpan)}}

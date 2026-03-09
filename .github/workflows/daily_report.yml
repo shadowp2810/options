@@ -2,9 +2,10 @@ name: Daily Options Report
 
 on:
   schedule:
-    # 10 PM UTC = 5 PM ET (market close), weekdays only
-    - cron: '0 22 * * 1-5'
-  workflow_dispatch: # allow manual trigger from GitHub UI
+    # 9:30 PM UTC = 4:30 PM ET (EST/winter) or 5:30 PM ET (EDT/summer)
+    # Always 30+ min after NYSE close (4:00 PM ET), letting final volume settle
+    - cron: '30 21 * * 1-5'
+  workflow_dispatch: # allow manual trigger anytime from the GitHub Actions tab
 
 permissions:
   contents: write
@@ -40,6 +41,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/index.html
+          git add docs/index.html reports/latest_analysis.json
           git diff --staged --quiet && echo "No changes to commit" || \
             git commit -m "chore: update options report $(date +'%Y-%m-%d')" && git push

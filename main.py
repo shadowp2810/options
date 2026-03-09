@@ -12,8 +12,9 @@ Usage:
 """
 
 import argparse
+import json
 import sys
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 import pandas as pd
@@ -62,24 +63,32 @@ HORIZONS_ORDER = list(HORIZONS.keys())  # ["7d","30d","45d","60d","90d","180d","
 def build_detail_rows(analyzed: list[dict]) -> list[dict]:
     rows = []
     for item in analyzed:
-        ticker = item["ticker"]
-        price  = item["price"]
+        ticker        = item["ticker"]
+        price         = item["price"]
+        earnings_date = item.get("earnings_date")
         for horizon in HORIZONS_ORDER:
-            h_data = item["horizons"].get(horizon, {})
-            expiry = h_data.get("expiry")
-            contracts = h_data.get("contracts", [])
+            h_data           = item["horizons"].get(horizon, {})
+            expiry           = h_data.get("expiry")
+            earnings_in_win  = h_data.get("earnings_in_window", False)
+            contracts        = h_data.get("contracts", [])
             for rank, contract in enumerate(contracts, 1):
                 rows.append({
-                    "Ticker":       ticker,
-                    "Current Price": price,
-                    "Horizon":      horizon,
-                    "Rank":         rank,
-                    "Expiry Date":  expiry or "N/A",
-                    "Strike":       contract.get("strike"),
-                    "Type":         contract.get("type"),
-                    "Volume":       contract.get("volume"),
-                    "Signal":       contract.get("signal"),
-                    "Forecast %":   contract.get("forecast_pct"),
+                    "Ticker":            ticker,
+                    "Current Price":     price,
+                    "Earnings Date":     earnings_date or "N/A",
+                    "Horizon":           horizon,
+                    "Rank":              rank,
+                    "Expiry Date":       expiry or "N/A",
+                    "⚠️ Earnings":       "YES" if earnings_in_win else "",
+                    "Strike":            contract.get("strike"),
+                    "Type":              contract.get("type"),
+                    "Volume":            contract.get("volume"),
+                    "Signal":            contract.get("signal"),
+                    "Forecast %":        contract.get("forecast_pct"),
+                    "Prev Strike":       contract.get("prev_strike"),
+                    "Strike Δ":          contract.get("strike_delta"),
+                    "Prev Signal":       contract.get("prev_signal"),
+                    "Signal Flipped":    "YES" if contract.get("signal_flipped") else "",
                 })
     return rows
 
@@ -88,10 +97,12 @@ def build_detail_rows(analyzed: list[dict]) -> list[dict]:
 # Write Detail sheet (long format)
 # ---------------------------------------------------------------------------
 def write_detail_sheet(ws, rows: list[dict]):
-    headers = ["Ticker", "Current Price", "Horizon", "Rank",
-               "Expiry Date", "Strike", "Type", "Volume", "Signal", "Forecast %"]
+    headers = [
+        "Ticker", "Current Price", "Earnings Date", "Horizon", "Rank",
+        "Expiry Date", "⚠️ Earnings", "Strike", "Type", "Volume",
+        "Signal", "Forecast %", "Prev Strike", "Strike Δ", "Prev Signal", "Signal Flipped",
+    ]
 
-    # Header row
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=h)
         cell.fill = HEADER_FILL
@@ -101,11 +112,15 @@ def write_detail_sheet(ws, rows: list[dict]):
 
     ws.row_dimensions[1].height = 30
 
+    ORANGE_FONT = Font(color="833C00", bold=True)
+
     for r, row in enumerate(rows, 2):
         values = [
-            row["Ticker"], row["Current Price"], row["Horizon"], row["Rank"],
-            row["Expiry Date"], row["Strike"], row["Type"], row["Volume"],
-            row["Signal"], row["Forecast %"],
+            row["Ticker"], row["Current Price"], row["Earnings Date"],
+            row["Horizon"], row["Rank"], row["Expiry Date"], row["⚠️ Earnings"],
+            row["Strike"], row["Type"], row["Volume"], row["Signal"],
+            row["Forecast %"], row["Prev Strike"], row["Strike Δ"],
+            row["Prev Signal"], row["Signal Flipped"],
         ]
         for c, val in enumerate(values, 1):
             cell = ws.cell(row=r, column=c, value=val)
@@ -113,7 +128,7 @@ def write_detail_sheet(ws, rows: list[dict]):
             cell.border = THIN_BORDER
 
             col_name = headers[c - 1]
-            if col_name == "Signal":
+            if col_name in ("Signal", "Prev Signal"):
                 if val == "BUY":
                     cell.fill = GREEN_FILL
                     cell.font = Font(color="375623", bold=True)
@@ -122,7 +137,7 @@ def write_detail_sheet(ws, rows: list[dict]):
                     cell.font = Font(color="9C0006", bold=True)
                 elif val == "HEDGE":
                     cell.fill = ORANGE_FILL
-                    cell.font = Font(color="833C00", bold=True)
+                    cell.font = ORANGE_FONT
             elif col_name == "Forecast %":
                 if val is not None:
                     cell.number_format = '0.00"%"'
@@ -132,18 +147,29 @@ def write_detail_sheet(ws, rows: list[dict]):
                         cell.fill = RED_FILL
                     else:
                         cell.fill = YELLOW_FILL
-            elif col_name == "Current Price" and val is not None:
+            elif col_name in ("Current Price", "Strike", "Prev Strike") and val is not None:
                 cell.number_format = '"$"#,##0.00'
-            elif col_name == "Strike" and val is not None:
+            elif col_name == "Strike Δ" and val is not None:
                 cell.number_format = '"$"#,##0.00'
+                if val > 0:
+                    cell.fill = GREEN_FILL
+                    cell.font = Font(color="375623")
+                elif val < 0:
+                    cell.fill = RED_FILL
+                    cell.font = Font(color="9C0006")
             elif col_name == "Volume" and val is not None:
                 cell.number_format = '#,##0'
             elif col_name == "Rank":
                 fills = [GREEN_FILL, YELLOW_FILL, PatternFill("solid", fgColor="FCE4D6")]
                 cell.fill = fills[int(val) - 1] if val and 1 <= int(val) <= 3 else GREY_FILL
+            elif col_name == "⚠️ Earnings" and val == "YES":
+                cell.fill = YELLOW_FILL
+                cell.font = Font(color="7D5700", bold=True)
+            elif col_name == "Signal Flipped" and val == "YES":
+                cell.fill = PatternFill("solid", fgColor="E2EFDA")
+                cell.font = Font(color="375623", bold=True)
 
-    # Column widths
-    widths = [10, 13, 8, 6, 12, 10, 8, 10, 8, 11]
+    widths = [10, 13, 13, 9, 6, 12, 10, 10, 8, 10, 8, 11, 12, 10, 12, 14]
     for col, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
@@ -341,19 +367,64 @@ def main():
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
     output_path = Path(args.output) if args.output else reports_dir / f"options_signals_{timestamp}.xlsx"
+    snapshot_path = reports_dir / "latest_analysis.json"
 
     print(f"Options Volume Signal Report")
     print(f"Date: {display_timestamp}")
     print(f"Tickers: {len(tickers)}")
     print(f"Output:  {output_path}\n")
 
+    # Load previous run snapshot for delta computation
+    MAX_DELTA_AGE_DAYS = 3  # suppress delta if snapshot is older than this
+
+    prev_data = None
+    snapshot_info = {"age_days": None, "generated": None, "suppressed": False}
+
+    if snapshot_path.exists():
+        try:
+            with open(snapshot_path, "r") as f:
+                snapshot = json.load(f)
+            # Support both old format (plain list) and new format (dict with metadata)
+            if isinstance(snapshot, list):
+                prev_data = snapshot
+                snap_generated = None
+                snap_age_days = None
+            else:
+                prev_data = snapshot.get("tickers", [])
+                snap_generated = snapshot.get("generated")
+                snap_age_days = None
+                if snap_generated:
+                    try:
+                        snap_date = datetime.fromisoformat(snap_generated).date()
+                        snap_age_days = (date.today() - snap_date).days
+                    except ValueError:
+                        pass
+
+            suppressed = snap_age_days is not None and snap_age_days > MAX_DELTA_AGE_DAYS
+            snapshot_info = {
+                "age_days": snap_age_days,
+                "generated": snap_generated,
+                "suppressed": suppressed,
+                "max_age": MAX_DELTA_AGE_DAYS,
+            }
+
+            age_str = f"{snap_age_days}d old" if snap_age_days is not None else "unknown age"
+            warn = " — SUPPRESSED (too old)" if suppressed else ""
+            print(f"Loaded previous snapshot: {snapshot_path} ({len(prev_data)} tickers, {age_str}{warn})\n")
+        except Exception as e:
+            print(f"[WARN] Could not load previous snapshot: {e}\n")
+
     # Step 1: Fetch
     print("--- Fetching data ---")
     fetch_results = fetch_all(tickers)
 
-    # Step 2: Analyze
+    # Step 2: Analyze (pass previous run for delta; suppress if snapshot too old)
     print("\n--- Analyzing ---")
-    analyzed = analyze_all(fetch_results)
+    analyzed = analyze_all(
+        fetch_results,
+        prev_data=prev_data,
+        suppress_delta=snapshot_info["suppressed"],
+    )
 
     # Step 3: Build detail rows
     detail_rows = build_detail_rows(analyzed)
@@ -376,19 +447,31 @@ def main():
     print(f"Excel report: {output_path.resolve()}")
 
     html_path = output_path.with_suffix(".html")
-    write_html(analyzed, html_path, display_timestamp)
+    write_html(analyzed, html_path, display_timestamp, snapshot_info=snapshot_info)
     print(f"\nDone! Open the HTML file in your browser to explore interactively.")
 
+    # Save snapshot for next run's delta computation (includes timestamp for age check)
+    try:
+        with open(snapshot_path, "w") as f:
+            json.dump({"generated": now.isoformat(), "tickers": analyzed}, f, default=str)
+        print(f"Snapshot saved: {snapshot_path}")
+    except Exception as e:
+        print(f"[WARN] Could not save snapshot: {e}")
+
     # Quick stats
-    total_buy   = sum(1 for r in detail_rows if r["Signal"] == "BUY")
-    total_sell  = sum(1 for r in detail_rows if r["Signal"] == "SELL")
-    total_hedge = sum(1 for r in detail_rows if r["Signal"] == "HEDGE")
-    total_na    = sum(1 for r in detail_rows if r["Signal"] is None)
+    total_buy     = sum(1 for r in detail_rows if r["Signal"] == "BUY")
+    total_sell    = sum(1 for r in detail_rows if r["Signal"] == "SELL")
+    total_hedge   = sum(1 for r in detail_rows if r["Signal"] == "HEDGE")
+    total_na      = sum(1 for r in detail_rows if r["Signal"] is None)
+    total_flipped = sum(1 for r in detail_rows if r["Signal Flipped"] == "YES")
+    earnings_hits = sum(1 for r in detail_rows if r["⚠️ Earnings"] == "YES")
     print(f"\nSignal breakdown across all tickers/horizons/ranks:")
-    print(f"  BUY:   {total_buy}")
-    print(f"  SELL:  {total_sell}")
-    print(f"  HEDGE: {total_hedge}  (ITM contracts — likely institutional hedges, not directional bets)")
-    print(f"  N/A:   {total_na}")
+    print(f"  BUY:            {total_buy}")
+    print(f"  SELL:           {total_sell}")
+    print(f"  HEDGE:          {total_hedge}  (ITM — likely institutional hedges)")
+    print(f"  N/A:            {total_na}")
+    print(f"  Signal flips:   {total_flipped}  (signal changed vs previous run)")
+    print(f"  Earnings flags: {earnings_hits}  (earnings within horizon window)")
 
 
 if __name__ == "__main__":
