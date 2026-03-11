@@ -19,6 +19,21 @@ HORIZONS: dict[str, int | None] = {
     "1y":   365,
 }
 
+# How each horizon's OI trend should be computed:
+#   "daily"    → compare vs yesterday's snapshot, use price_1d for combo signal
+#   "weekly"   → compare vs 7-day-old snapshot, use price_5d for combo signal
+#   "suppress" → show C/P OI totals only, no trend % or combo signal
+HORIZON_OI_WINDOW: dict[str, str] = {
+    "fri":  "daily",
+    "7d":   "daily",
+    "30d":  "weekly",
+    "45d":  "weekly",
+    "60d":  "weekly",
+    "90d":  "weekly",
+    "180d": "suppress",
+    "1y":   "suppress",
+}
+
 
 def next_friday(today: date) -> date:
     """
@@ -172,7 +187,9 @@ def analyze_ticker(
     chains: dict[str, pd.DataFrame],
     earnings_date: Optional[str] = None,
     company_info: Optional[dict] = None,
-    prev_horizons: Optional[dict] = None,
+    price_history: Optional[dict] = None,
+    prev_horizons: Optional[dict] = None,        # yesterday's snapshot
+    prev_horizons_weekly: Optional[dict] = None, # ~7-day-old snapshot
     today: Optional[date] = None,
 ) -> dict:
     """
@@ -191,6 +208,7 @@ def analyze_ticker(
         "price": price,
         "earnings_date": earnings_date,
         "company_info": company_info or {"name": None, "sector": None, "industry": None},
+        "price_history": price_history or {"price_1d_pct": None, "price_5d_pct": None},
         "horizons": {},
         "intraweek": [],
     }
@@ -234,8 +252,21 @@ def analyze_ticker(
 
         if expiry is None or expiry not in chains:
             contracts = [dict(empty_contract)] * TOP_N
+            total_call_oi = 0
+            total_put_oi  = 0
         else:
             contracts = top_contracts(chains[expiry], price)
+            # Compute total call/put OI across ALL contracts in this expiry — much
+            # more stable for day-over-day trend than summing only the top-N.
+            chain_df = chains[expiry]
+            total_call_oi = int(
+                chain_df.loc[chain_df["type"].str.lower() == "call", "openInterest"]
+                .pipe(pd.to_numeric, errors="coerce").fillna(0).sum()
+            )
+            total_put_oi = int(
+                chain_df.loc[chain_df["type"].str.lower() == "put", "openInterest"]
+                .pipe(pd.to_numeric, errors="coerce").fillna(0).sum()
+            )
 
         # Attach delta vs previous run
         prev_contracts = []
@@ -265,10 +296,83 @@ def analyze_ticker(
                 and not is_hedge(prev_signal)
             )
 
+        # OI trend — window and price direction depend on horizon
+        oi_window = HORIZON_OI_WINDOW.get(label, "daily")
+
+        # Significance thresholds
+        OI_SIG_PCT  = 5.0
+        OI_SIG_ABS  = 500
+        OI_MIN_BASE = 500   # minimum prev OI to compute a meaningful %
+
+        def _oi_trend(curr: int, prev: int) -> tuple[str, float | None]:
+            """Returns (trend, change_pct). trend is 'up'/'down'/'flat'/'none'."""
+            if prev < OI_MIN_BASE:
+                return "none", None
+            delta = curr - prev
+            pct = round(delta / prev * 100, 1)
+            if abs(pct) >= OI_SIG_PCT and abs(delta) >= OI_SIG_ABS:
+                return ("up" if delta > 0 else "down"), pct
+            return "flat", pct
+
+        def _extract_prev_ois(horizons_dict: Optional[dict]) -> tuple[Optional[int], Optional[int]]:
+            """Pull total_call_oi/total_put_oi from a previous-run horizons dict."""
+            if not horizons_dict or label not in horizons_dict:
+                return None, None
+            h = horizons_dict[label]
+            c = h.get("total_call_oi")
+            p = h.get("total_put_oi")
+            # Back-compat: fall back to summing stored contracts
+            if c is None:
+                c = sum((x.get("open_interest") or 0) for x in h.get("contracts", [])
+                        if (x.get("type") or "").lower() == "call")
+            if p is None:
+                p = sum((x.get("open_interest") or 0) for x in h.get("contracts", [])
+                        if (x.get("type") or "").lower() == "put")
+            return c, p
+
+        call_oi_trend, call_oi_pct = "none", None
+        put_oi_trend,  put_oi_pct  = "none", None
+        combo_signal = None
+
+        if oi_window != "suppress":
+            # Pick the right snapshot
+            ref_horizons = prev_horizons_weekly if oi_window == "weekly" else prev_horizons
+            prev_call_oi, prev_put_oi = _extract_prev_ois(ref_horizons)
+
+            if prev_call_oi is not None:
+                call_oi_trend, call_oi_pct = _oi_trend(total_call_oi, prev_call_oi)
+            if prev_put_oi is not None:
+                put_oi_trend, put_oi_pct = _oi_trend(total_put_oi, prev_put_oi)
+
+            # Price direction: 1D for daily horizons, 5D for weekly horizons
+            ph = price_history or {}
+            price_dir = ph.get("price_1d_pct") if oi_window == "daily" else ph.get("price_5d_pct")
+            price_up = price_dir is not None and price_dir > 0
+            price_dn = price_dir is not None and price_dir < 0
+            c_up = call_oi_trend == "up"
+            c_dn = call_oi_trend == "down"
+            p_up = put_oi_trend == "up"
+            p_dn = put_oi_trend == "down"
+
+            if c_up and p_dn and price_up:   combo_signal = "Bullish"
+            elif p_up and c_dn and price_dn: combo_signal = "Bearish"
+            elif p_up and price_up:          combo_signal = "Hedged Rally"
+            elif c_up and price_dn:          combo_signal = "Short Covering"
+            elif c_up and p_up:              combo_signal = "Build-Up"
+            elif c_dn and p_dn:              combo_signal = "Unwinding"
+
         result["horizons"][label] = {
             "expiry": expiry,
             "earnings_in_window": earnings_in_window,
             "contracts": contracts,
+            "total_call_oi": total_call_oi,
+            "total_put_oi":  total_put_oi,
+            "oi_window":     oi_window,        # "daily" / "weekly" / "suppress"
+            "call_oi_trend": call_oi_trend,
+            "put_oi_trend":  put_oi_trend,
+            "call_oi_pct":   call_oi_pct,
+            "put_oi_pct":    put_oi_pct,
+            "combo_signal":  combo_signal,
         }
 
     # Intra-week expiries (Mon–Thu) for hyper-liquid stocks
@@ -288,23 +392,25 @@ def analyze_ticker(
 def analyze_all(
     fetch_results: dict,
     prev_data: Optional[list] = None,
+    prev_data_weekly: Optional[list] = None,
     suppress_delta: bool = False,
 ) -> list[dict]:
     """
     Runs analyze_ticker on every ticker in fetch_results.
-    prev_data: list of analysis dicts from the previous run (for delta computation).
-    suppress_delta: if True, skip delta computation (snapshot too old).
-    Returns a list of analysis dicts.
+    prev_data:        yesterday's snapshot (daily OI comparison for Fri/7D).
+    prev_data_weekly: ~7-day-old snapshot (weekly OI comparison for 30D-90D).
+    suppress_delta:   if True, skip delta computation (snapshot too old).
     """
     today = date.today()
 
-    # Build previous-run lookup: ticker -> horizons dict
-    prev_lookup: dict[str, dict] = {}
-    if prev_data and not suppress_delta:
-        for item in prev_data:
-            t = item.get("ticker")
-            if t:
-                prev_lookup[t] = item.get("horizons", {})
+    def _build_lookup(data: Optional[list]) -> dict[str, dict]:
+        if not data or suppress_delta:
+            return {}
+        return {item["ticker"]: item.get("horizons", {})
+                for item in data if item.get("ticker")}
+
+    prev_lookup        = _build_lookup(prev_data)
+    prev_lookup_weekly = _build_lookup(prev_data_weekly)
 
     analyzed = []
     for ticker, data in fetch_results.items():
@@ -315,7 +421,9 @@ def analyze_all(
             chains=data.get("chains", {}),
             earnings_date=data.get("earnings_date"),
             company_info=data.get("company_info"),
+            price_history=data.get("price_history"),
             prev_horizons=prev_lookup.get(ticker),
+            prev_horizons_weekly=prev_lookup_weekly.get(ticker),
             today=today,
         )
         analyzed.append(row)

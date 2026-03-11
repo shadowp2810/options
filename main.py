@@ -15,6 +15,7 @@ import argparse
 import json
 import sys
 from datetime import datetime, date
+from typing import Optional
 from pathlib import Path
 
 import pandas as pd
@@ -371,62 +372,78 @@ def main():
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
     output_path = Path(args.output) if args.output else reports_dir / f"options_signals_{timestamp}.xlsx"
-    snapshot_path = reports_dir / "latest_analysis.json"
+    snapshot_path        = reports_dir / "latest_analysis.json"
+    weekly_snapshot_path = reports_dir / "weekly_analysis.json"
 
     print(f"Options Volume Signal Report")
     print(f"Date: {display_timestamp}")
     print(f"Tickers: {len(tickers)}")
     print(f"Output:  {output_path}\n")
 
-    # Load previous run snapshot for delta computation
-    MAX_DELTA_AGE_DAYS = 3  # suppress delta if snapshot is older than this
+    # Load daily and weekly snapshots for OI trend computation
+    MAX_DELTA_AGE_DAYS   = 3   # suppress daily delta if older than this
+    WEEKLY_MIN_AGE_DAYS  = 5   # weekly snapshot must be at least 5 days old to be useful
+    WEEKLY_MAX_AGE_DAYS  = 30  # suppress weekly if older than this
 
-    prev_data = None
-    snapshot_info = {"age_days": None, "generated": None, "suppressed": False}
-
-    if snapshot_path.exists():
+    def _load_snapshot(path) -> tuple[Optional[list], Optional[str], Optional[int]]:
+        """Returns (tickers_list, generated_iso, age_days) or (None, None, None) on failure."""
+        if not path.exists():
+            return None, None, None
         try:
-            with open(snapshot_path, "r") as f:
-                snapshot = json.load(f)
-            # Support both old format (plain list) and new format (dict with metadata)
-            if isinstance(snapshot, list):
-                prev_data = snapshot
-                snap_generated = None
-                snap_age_days = None
-            else:
-                prev_data = snapshot.get("tickers", [])
-                snap_generated = snapshot.get("generated")
-                snap_age_days = None
-                if snap_generated:
-                    try:
-                        snap_date = datetime.fromisoformat(snap_generated).date()
-                        snap_age_days = (date.today() - snap_date).days
-                    except ValueError:
-                        pass
-
-            suppressed = snap_age_days is not None and snap_age_days > MAX_DELTA_AGE_DAYS
-            snapshot_info = {
-                "age_days": snap_age_days,
-                "generated": snap_generated,
-                "suppressed": suppressed,
-                "max_age": MAX_DELTA_AGE_DAYS,
-            }
-
-            age_str = f"{snap_age_days}d old" if snap_age_days is not None else "unknown age"
-            warn = " — SUPPRESSED (too old)" if suppressed else ""
-            print(f"Loaded previous snapshot: {snapshot_path} ({len(prev_data)} tickers, {age_str}{warn})\n")
+            with open(path, "r") as f:
+                snap = json.load(f)
+            if isinstance(snap, list):
+                return snap, None, None
+            tickers = snap.get("tickers", [])
+            generated = snap.get("generated")
+            age_days = None
+            if generated:
+                try:
+                    age_days = (date.today() - datetime.fromisoformat(generated).date()).days
+                except ValueError:
+                    pass
+            return tickers, generated, age_days
         except Exception as e:
-            print(f"[WARN] Could not load previous snapshot: {e}\n")
+            print(f"[WARN] Could not load {path.name}: {e}")
+            return None, None, None
+
+    prev_data, snap_generated, snap_age_days = _load_snapshot(snapshot_path)
+    suppressed = snap_age_days is not None and snap_age_days > MAX_DELTA_AGE_DAYS
+    snapshot_info = {
+        "age_days": snap_age_days,
+        "generated": snap_generated,
+        "suppressed": suppressed,
+        "max_age": MAX_DELTA_AGE_DAYS,
+    }
+    if prev_data is not None:
+        age_str = f"{snap_age_days}d old" if snap_age_days is not None else "unknown age"
+        warn = " — SUPPRESSED (too old)" if suppressed else ""
+        print(f"Loaded daily snapshot:  {snapshot_path} ({len(prev_data)} tickers, {age_str}{warn})")
+
+    prev_data_weekly, weekly_generated, weekly_age_days = _load_snapshot(weekly_snapshot_path)
+    weekly_usable = (
+        prev_data_weekly is not None
+        and weekly_age_days is not None
+        and WEEKLY_MIN_AGE_DAYS <= weekly_age_days <= WEEKLY_MAX_AGE_DAYS
+    )
+    if not weekly_usable:
+        prev_data_weekly = None  # treat as unavailable
+    if weekly_generated:
+        w_age = f"{weekly_age_days}d old" if weekly_age_days is not None else "unknown age"
+        w_note = "" if weekly_usable else " — not used (too fresh or too old)"
+        print(f"Loaded weekly snapshot: {weekly_snapshot_path} ({w_age}{w_note})")
+    print()
 
     # Step 1: Fetch
     print("--- Fetching data ---")
     fetch_results = fetch_all(tickers)
 
-    # Step 2: Analyze (pass previous run for delta; suppress if snapshot too old)
+    # Step 2: Analyze (pass daily + weekly snapshots for OI trend)
     print("\n--- Analyzing ---")
     analyzed = analyze_all(
         fetch_results,
         prev_data=prev_data,
+        prev_data_weekly=prev_data_weekly,
         suppress_delta=snapshot_info["suppressed"],
     )
 
@@ -454,13 +471,26 @@ def main():
     write_html(analyzed, html_path, display_timestamp, snapshot_info=snapshot_info)
     print(f"\nDone! Open the HTML file in your browser to explore interactively.")
 
-    # Save snapshot for next run's delta computation (includes timestamp for age check)
+    # Save daily snapshot (always overwrite)
     try:
         with open(snapshot_path, "w") as f:
             json.dump({"generated": now.isoformat(), "tickers": analyzed}, f, default=str)
         print(f"Snapshot saved: {snapshot_path}")
     except Exception as e:
         print(f"[WARN] Could not save snapshot: {e}")
+
+    # Save weekly snapshot only when it doesn't exist or is ≥7 days old
+    try:
+        _, _, w_age = _load_snapshot(weekly_snapshot_path)
+        should_refresh_weekly = (w_age is None or w_age >= 7)
+        if should_refresh_weekly:
+            with open(weekly_snapshot_path, "w") as f:
+                json.dump({"generated": now.isoformat(), "tickers": analyzed}, f, default=str)
+            print(f"Weekly snapshot saved: {weekly_snapshot_path}")
+        else:
+            print(f"Weekly snapshot kept:  {weekly_snapshot_path} ({w_age}d old, refreshes at 7d)")
+    except Exception as e:
+        print(f"[WARN] Could not save weekly snapshot: {e}")
 
     # Quick stats
     total_buy     = sum(1 for r in detail_rows if r["Signal"] == "BUY")

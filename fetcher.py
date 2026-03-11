@@ -79,6 +79,37 @@ def get_company_info(ticker_obj: yf.Ticker) -> dict:
         return {"name": None, "sector": None, "industry": None}
 
 
+def get_price_history(ticker_obj: yf.Ticker) -> dict:
+    """
+    Returns {price_1d_pct, price_5d_pct} — % change over 1 and 5 trading days.
+    Uses last 10 calendar days of history to ensure 5 trading days are available.
+    """
+    try:
+        hist = ticker_obj.history(period="10d")
+        if hist.empty or len(hist) < 2:
+            return {"price_1d_pct": None, "price_5d_pct": None}
+        closes = hist["Close"].dropna()
+        today_close = float(closes.iloc[-1])
+
+        price_1d_pct = None
+        if len(closes) >= 2:
+            prev = float(closes.iloc[-2])
+            price_1d_pct = round((today_close - prev) / prev * 100, 2) if prev else None
+
+        price_5d_pct = None
+        if len(closes) >= 6:
+            base = float(closes.iloc[-6])
+            price_5d_pct = round((today_close - base) / base * 100, 2) if base else None
+        elif len(closes) >= 2:
+            # Fewer than 5 days available (e.g. recently listed) — use whatever we have
+            base = float(closes.iloc[0])
+            price_5d_pct = round((today_close - base) / base * 100, 2) if base else None
+
+        return {"price_1d_pct": price_1d_pct, "price_5d_pct": price_5d_pct}
+    except Exception:
+        return {"price_1d_pct": None, "price_5d_pct": None}
+
+
 def get_earnings_date(ticker_obj: yf.Ticker) -> Optional[str]:
     """
     Returns the next earnings date as an ISO string (YYYY-MM-DD), or None.
@@ -122,6 +153,7 @@ def fetch_all(tickers: list[str], delay: float = 0.6) -> dict:
 
         earnings_date = get_earnings_date(ticker_obj)
         company_info  = get_company_info(ticker_obj)
+        price_history = get_price_history(ticker_obj)
 
         # NASDAQ public API gives accurate OI for free; fall back to yfinance
         expirations, chains = get_options_chain_nasdaq(ticker)
@@ -133,6 +165,7 @@ def fetch_all(tickers: list[str], delay: float = 0.6) -> dict:
             "price": round(price, 2),
             "earnings_date": earnings_date,
             "company_info": company_info,
+            "price_history": price_history,
             "expirations": expirations,
             "chains": chains,
         }

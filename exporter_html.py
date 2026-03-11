@@ -153,6 +153,47 @@ def write_html(
     padding: 2px 7px;
     color: var(--text-muted);
   }}
+  .trend-bar {{
+    padding: 8px 20px 9px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.02);
+  }}
+  .trend-section-label {{ font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.07em; }}
+  .trend-val {{ font-weight: 700; font-size: 11px; }}
+  .trend-val.up {{ color: #4ade80; }}
+  .trend-val.down {{ color: #f87171; }}
+  .trend-val.flat {{ color: var(--text-muted); }}
+  .trend-val.na {{ color: var(--text-muted); opacity: 0.5; }}
+  .trend-sep {{ color: var(--border); padding: 0 2px; font-size: 13px; }}
+  .oi-horizon-group {{
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 7px;
+    font-size: 10px;
+  }}
+  .oi-horizon-label {{ font-weight: 700; color: var(--text-muted); margin-right: 2px; }}
+  .oi-side {{ font-weight: 700; }}
+  .oi-side.up {{ color: #4ade80; }}
+  .oi-side.down {{ color: #f87171; }}
+  .oi-side.flat {{ color: var(--text-muted); }}
+  .oi-side.none {{ color: var(--text-muted); opacity: 0.4; }}
+  .combo-badge {{
+    font-size: 10px; font-weight: 700; padding: 2px 7px;
+    border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em;
+    vertical-align: middle; white-space: nowrap;
+  }}
+  .combo-badge.Bullish       {{ background: #16a34a33; color: #4ade80; border: 1px solid #4ade8055; }}
+  .combo-badge.Bearish       {{ background: #dc262633; color: #f87171; border: 1px solid #f8717155; }}
+  .combo-badge.HedgedRally   {{ background: #a16207aa; color: #fde047; border: 1px solid #fde04755; }}
+  .combo-badge.ShortCovering {{ background: #0e748933; color: #67e8f9; border: 1px solid #67e8f955; }}
+  .combo-badge.BuildUp       {{ background: #6d28d933; color: #c4b5fd; border: 1px solid #c4b5fd55; }}
+  .combo-badge.Unwinding     {{ background: #37415133; color: #94a3b8;  border: 1px solid #94a3b855; }}
   .intraweek-section {{ margin-top: 14px; border-top: 1px dashed #2e3250; padding-top: 10px; padding-bottom: 6px; }}
   .intraweek-header {{ font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #818cf8; margin-bottom: 8px; }}
   .intraweek-blocks {{ display: flex; flex-wrap: wrap; gap: 8px; }}
@@ -223,6 +264,23 @@ def write_html(
     border-bottom: 1px solid var(--border);
     background: #13162a;
   }}
+  .combo-legend {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px 20px 10px;
+    border-bottom: 1px solid var(--border);
+    background: #0f1226;
+  }}
+  .combo-legend-title {{
+    width: 100%;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }}
   .legend-item {{
     display: flex;
     align-items: flex-start;
@@ -232,6 +290,7 @@ def write_html(
     line-height: 1.4;
   }}
   .legend-item .badge {{ flex-shrink: 0; margin-top: 1px; }}
+  .legend-item .combo-badge {{ flex-shrink: 0; margin-top: 1px; }}
   .legend-desc strong {{ color: var(--text); }}
   .table-wrap {{ overflow-x: auto; }}
   table {{
@@ -399,8 +458,8 @@ def write_html(
 
   /* ---- OI bar chart inside horizon blocks ---- */
   .oi-chart-wrap {{
-    padding: 6px 10px 8px;
-    height: 130px;
+    padding: 6px 10px 12px;
+    height: 160px;
     position: relative;
     border-top: 1px solid var(--border);
   }}
@@ -610,6 +669,33 @@ def write_html(
       <div class="legend-item">
         <span class="badge hedge-p">HEDGE-P</span>
         <span class="legend-desc"><strong>ITM Put</strong> — smart money insuring against further downside on a stock they hold</span>
+      </div>
+    </div>
+    <div class="combo-legend">
+      <div class="combo-legend-title">OI Trend Signals (expanded view) — based on call &amp; put OI change vs prior snapshot + price direction</div>
+      <div class="legend-item">
+        <span class="combo-badge Bullish">Bullish</span>
+        <span class="legend-desc"><strong>C↑ P↓ + Price↑</strong> — new money entering on the upside</span>
+      </div>
+      <div class="legend-item">
+        <span class="combo-badge Bearish">Bearish</span>
+        <span class="legend-desc"><strong>P↑ C↓ + Price↓</strong> — new money entering on the downside</span>
+      </div>
+      <div class="legend-item">
+        <span class="combo-badge HedgedRally">Hedged Rally</span>
+        <span class="legend-desc"><strong>P↑ + Price↑</strong> — stock rising but institutions buying downside protection</span>
+      </div>
+      <div class="legend-item">
+        <span class="combo-badge ShortCovering">Short Covering</span>
+        <span class="legend-desc"><strong>C↑ + Price↓</strong> — price falling but call OI rising; shorts may be exiting</span>
+      </div>
+      <div class="legend-item">
+        <span class="combo-badge BuildUp">Build-Up</span>
+        <span class="legend-desc"><strong>C↑ P↑</strong> — both sides adding; big move expected, direction unclear</span>
+      </div>
+      <div class="legend-item">
+        <span class="combo-badge Unwinding">Unwinding</span>
+        <span class="legend-desc"><strong>C↓ P↓</strong> — both sides closing; calm period or approaching expiry</span>
       </div>
     </div>
     <div class="table-wrap">
@@ -905,7 +991,7 @@ function buildDetailCellContent(ticker) {{
     const chartHtml = contracts.length > 0 ? `
       <div class="oi-chart-wrap">
         <div class="oi-chart-label">Top OI by strike</div>
-        <canvas id="${{chartId}}" style="height:100px"></canvas>
+        <canvas id="${{chartId}}" style="height:125px"></canvas>
       </div>` : "";
 
     return `<div class="horizon-block">
@@ -951,7 +1037,7 @@ function buildDetailCellContent(ticker) {{
       const iwChartHtml = entry.contracts.length > 0 ? `
         <div class="oi-chart-wrap">
           <div class="oi-chart-label">Top OI by strike</div>
-          <canvas id="${{iwChartId}}" style="height:100px"></canvas>
+          <canvas id="${{iwChartId}}" style="height:125px"></canvas>
         </div>` : "";
       return `<div class="intraweek-block">
         <div class="intraweek-block-header">
@@ -977,11 +1063,225 @@ function buildDetailCellContent(ticker) {{
       ${{tags.length ? `<div class="ticker-meta-tags">${{tags.map(t => `<span class="ticker-meta-tag">${{t}}</span>`).join("")}}</div>` : ""}}
     </div>` : "";
 
-  return `${{metaHtml}}<div class="detail-inner">${{h_blocks}}</div>${{intraweekHtml}}`;
+  // Price + OI trend bar
+  function fmtPctChange(val) {{
+    if (val === null || val === undefined) return {{ html: `<span class="trend-val na">N/A</span>`, cls: "na" }};
+    const cls = val > 0 ? "up" : val < 0 ? "down" : "flat";
+    const arrow = val > 0 ? "▲" : val < 0 ? "▼" : "→";
+    const sign = val > 0 ? "+" : "";
+    return {{ html: `<span class="trend-val ${{cls}}">${{arrow}} ${{sign}}${{val.toFixed(2)}}%</span>`, cls }};
+  }}
+  const ph = ticker.price_history || {{}};
+  const p1d = fmtPctChange(ph.price_1d_pct);
+  const p5d = fmtPctChange(ph.price_5d_pct);
+  function fmtOISide(trend, pct, label, windowNote) {{
+    // trend: "up"/"down"/"flat"/"none"
+    // Returns HTML for one side (C or P)
+    if (trend === "none" || trend === null || trend === undefined) {{
+      return `<span class="oi-side none">${{label}}—</span>`;
+    }}
+    const arrow = trend === "up" ? "↑" : trend === "down" ? "↓" : "→";
+    const sign  = pct > 0 ? "+" : "";
+    const pctStr = pct !== null && pct !== undefined ? `${{sign}}${{pct}}%` : "";
+    const win   = windowNote ? ` (${{windowNote}})` : "";
+    const title = `${{label}} OI ${{pctStr}}${{win}}`;
+    return `<span class="oi-side ${{trend}}" title="${{title}}">${{label}}${{arrow}}${{pctStr}}</span>`;
+  }}
+
+  const COMBO_TOOLTIPS = {{
+    "Bullish":       "Call OI ↑ + Put OI ↓ + Price ↑ — new money entering on upside",
+    "Bearish":       "Put OI ↑ + Call OI ↓ + Price ↓ — new money entering on downside",
+    "Hedged Rally":  "Put OI ↑ + Price ↑ — rally but institutions buying downside protection",
+    "Short Covering":"Call OI ↑ + Price ↓ — price falling but shorts may be exiting",
+    "Build-Up":      "Both Call & Put OI ↑ — uncertainty, big move expected either way",
+    "Unwinding":     "Both Call & Put OI ↓ — positions closing, calm or near expiry",
+  }};
+
+  const OI_WINDOW_LABEL = {{ "daily": "vs yesterday", "weekly": "vs 7 days ago", "suppress": "totals only" }};
+
+  function buildOIGroup(h) {{
+    const hd = (ticker.horizons || {{}})[h] || {{}};
+    const shortLabel = h === "fri" ? "Fri" : h.toUpperCase();
+    const oi_window  = hd.oi_window || "daily";
+    const windowNote = OI_WINDOW_LABEL[oi_window] || "";
+
+    if (oi_window === "suppress") {{
+      const tc = hd.total_call_oi;
+      const tp = hd.total_put_oi;
+      const fmtK = v => v >= 1000 ? (v/1000).toFixed(0)+"k" : (v || 0).toString();
+      const tip = `${{shortLabel}}: Call OI ${{fmtK(tc)}} | Put OI ${{fmtK(tp)}} (${{windowNote}})`;
+      return `<span class="oi-horizon-group" title="${{tip}}" style="opacity:0.5">
+        <span class="oi-horizon-label">${{shortLabel}}</span>
+        <span class="oi-side flat">C ${{fmtK(tc)}}</span>
+        <span class="oi-side flat">P ${{fmtK(tp)}}</span>
+      </span>`;
+    }}
+
+    const cTrend = hd.call_oi_trend || "none";
+    const pTrend = hd.put_oi_trend  || "none";
+    const cPct   = hd.call_oi_pct ?? null;
+    const pPct   = hd.put_oi_pct   ?? null;
+    const combo  = hd.combo_signal;
+
+    const cHtml = fmtOISide(cTrend, cPct, "C", windowNote);
+    const pH    = fmtOISide(pTrend, pPct, "P", windowNote);
+    const comboCls = combo ? combo.replace(/[^a-zA-Z]/g, "") : "";
+    const comboHtml = combo
+      ? `<span class="combo-badge ${{comboCls}}" title="${{COMBO_TOOLTIPS[combo] || combo}} (${{windowNote}})">${{combo}}</span>`
+      : "";
+
+    return `<span class="oi-horizon-group">
+      <span class="oi-horizon-label">${{shortLabel}}</span>
+      ${{cHtml}} ${{pH}}${{comboHtml ? " " + comboHtml : ""}}
+    </span>`;
+  }}
+
+  // Group horizons by their OI comparison window
+  const dailyHorizons    = HORIZONS.filter(h => ((ticker.horizons||{{}})[h]||{{}}).oi_window === "daily");
+  const weeklyHorizons   = HORIZONS.filter(h => ((ticker.horizons||{{}})[h]||{{}}).oi_window === "weekly");
+  const suppressHorizons = HORIZONS.filter(h => ((ticker.horizons||{{}})[h]||{{}}).oi_window === "suppress");
+
+  const dailyGroupsHtml   = dailyHorizons.map(buildOIGroup).join(" ");
+  const weeklyGroupsHtml  = weeklyHorizons.map(buildOIGroup).join(" ");
+  const suppressGroupsHtml= suppressHorizons.map(buildOIGroup).join(" ");
+
+  const trendBarHtml = `
+    <div class="trend-bar">
+      <span class="trend-section-label">Price</span>
+      <span>1D: ${{p1d.html}}</span>
+      <span>5D: ${{p5d.html}}</span>
+      <span class="trend-sep">·</span>
+      ${{dailyGroupsHtml ? `<span class="trend-section-label">OI vs Yesterday</span> ${{dailyGroupsHtml}}` : ""}}
+      ${{weeklyGroupsHtml ? `<span class="trend-sep">·</span><span class="trend-section-label">OI vs 7 Days Ago</span> ${{weeklyGroupsHtml}}` : ""}}
+      ${{suppressGroupsHtml ? `<span class="trend-sep">·</span><span class="trend-section-label" style="opacity:0.4">Long-dated OI</span> ${{suppressGroupsHtml}}` : ""}}
+    </div>`;
+
+  return `${{metaHtml}}${{trendBarHtml}}<div class="detail-inner">${{h_blocks}}</div>${{intraweekHtml}}`;
 }}
 
 const expandedTickers = new Set(); // persists across renders
 const oiCharts = {{}}; // ticker -> [Chart, ...]
+
+// ── Shared helper: build a Chart.js config with a linear x-axis ─────────────
+// Uses numeric strike values on the x-axis so spacing reflects real distance
+// (e.g. 410→420 is twice as wide as 420→425). Also draws a vertical dashed
+// line at the current stock price so ITM/OTM boundary is immediately visible.
+function buildOIChartConfig(strikes, byStrike, currentPrice) {{
+  // Compute a sensible bar width: ~60% of the median inter-strike gap in pixels
+  // We rely on Chart.js barThickness (px); pick something readable.
+  const BAR_THICKNESS = Math.max(3, Math.min(10, Math.floor(180 / (strikes.length + 1))));
+
+  // Vertical "current price" line via Chart.js beforeDraw plugin
+  const priceLinePlugin = {{
+    id: "priceLine",
+    beforeDraw(chart) {{
+      const xScale = chart.scales.x;
+      if (!xScale || currentPrice == null) return;
+      const xPx = xScale.getPixelForValue(currentPrice);
+      if (xPx < xScale.left || xPx > xScale.right) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = "rgba(250,204,21,0.7)";  // amber dashed line
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(xPx, chart.chartArea.top);
+      ctx.lineTo(xPx, chart.chartArea.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }}
+  }};
+
+  return {{
+    type: "bar",
+    plugins: [priceLinePlugin],
+    data: {{
+      datasets: [
+        {{
+          label: "Call OI",
+          data: strikes.map(s => ({{ x: s, y: byStrike[s]?.call ?? 0 }})),
+          backgroundColor: "rgba(34,197,94,0.75)",
+          borderColor: "rgba(34,197,94,1)",
+          borderWidth: 1, borderRadius: 2,
+          barThickness: BAR_THICKNESS,
+          stack: "oi",
+        }},
+        {{
+          label: "Put OI",
+          data: strikes.map(s => ({{ x: s, y: byStrike[s]?.put ?? 0 }})),
+          backgroundColor: "rgba(239,68,68,0.75)",
+          borderColor: "rgba(239,68,68,1)",
+          borderWidth: 1, borderRadius: 2,
+          barThickness: BAR_THICKNESS,
+          stack: "oi",
+        }},
+      ]
+    }},
+    options: {{
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {{
+        legend: {{
+          display: true, position: "top", align: "end",
+          labels: {{ color: "#94a3b8", boxWidth: 10, font: {{ size: 9 }}, padding: 6 }},
+        }},
+        tooltip: {{
+          mode: "index", intersect: false,
+          callbacks: {{
+            title: items => `Strike $${{items[0].parsed.x}}`,
+            label(ctx) {{
+              const s = ctx.parsed.x;
+              const d = byStrike[s] ?? {{}};
+              if (ctx.dataset.label === "Call OI")
+                return d.call > 0
+                  ? `Call OI: ${{d.call.toLocaleString()}} | Vol: ${{d.callVol?.toLocaleString()}}${{d.callSig ? " | " + d.callSig : ""}}`
+                  : null;
+              return d.put > 0
+                ? `Put  OI: ${{d.put.toLocaleString()}} | Vol: ${{d.putVol?.toLocaleString()}}${{d.putSig ? " | " + d.putSig : ""}}`
+                : null;
+            }},
+            filter: item => item.parsed.y > 0,
+            afterBody: items => {{
+              if (currentPrice != null && items.length > 0) {{
+                const s = items[0].parsed.x;
+                return [`Current price: $${{currentPrice}}`];
+              }}
+              return [];
+            }},
+          }},
+          backgroundColor: "#1a1d27", borderColor: "#2e3250", borderWidth: 1,
+          titleColor: "#e2e8f0", bodyColor: "#94a3b8", padding: 8,
+        }},
+      }},
+      scales: {{
+        x: {{
+          type: "linear",
+          stacked: true,
+          offset: true,          // leave small margin on edges
+          ticks: {{
+            color: "#64748b",
+            font: {{ size: 9 }},
+            maxRotation: 40,
+            callback: v => `$${{v}}`,
+            // Show at most ~8 tick labels regardless of how many strikes there are
+            maxTicksLimit: 8,
+          }},
+          grid: {{ color: "#1e2235" }},
+        }},
+        y: {{
+          stacked: true,
+          ticks: {{
+            color: "#64748b", font: {{ size: 9 }},
+            callback: v => v >= 1000 ? (v / 1000).toFixed(0) + "k" : v,
+          }},
+          grid: {{ color: "#1e2235" }},
+        }},
+      }},
+    }},
+  }};
+}}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function initOICharts(tickerStr, tickerData) {{
   // Destroy any previous instances for this ticker
@@ -989,6 +1289,8 @@ function initOICharts(tickerStr, tickerData) {{
     oiCharts[tickerStr].forEach(c => {{ try {{ c.destroy(); }} catch(e) {{}} }});
   }}
   oiCharts[tickerStr] = [];
+
+  const currentPrice = tickerData.price ?? null;
 
   HORIZONS.forEach(h => {{
     const safeId = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
@@ -1019,88 +1321,7 @@ function initOICharts(tickerStr, tickerData) {{
       }}
     }});
 
-    const labels    = strikes.map(s => `$${{s}}`);
-    const callData  = strikes.map(s => byStrike[s]?.call ?? 0);
-    const putData   = strikes.map(s => byStrike[s]?.put  ?? 0);
-
-    const chart = new Chart(canvas.getContext("2d"), {{
-      type: "bar",
-      data: {{
-        labels,
-        datasets: [
-          {{
-            label: "Call OI",
-            data: callData,
-            backgroundColor: "rgba(34,197,94,0.75)",
-            borderColor: "rgba(34,197,94,1)",
-            borderWidth: 1,
-            borderRadius: 2,
-            stack: "oi",
-          }},
-          {{
-            label: "Put OI",
-            data: putData,
-            backgroundColor: "rgba(239,68,68,0.75)",
-            borderColor: "rgba(239,68,68,1)",
-            borderWidth: 1,
-            borderRadius: 2,
-            stack: "oi",
-          }},
-        ]
-      }},
-      options: {{
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {{
-          legend: {{
-            display: true,
-            position: "top",
-            align: "end",
-            labels: {{ color: "#94a3b8", boxWidth: 10, font: {{ size: 9 }}, padding: 6 }},
-          }},
-          tooltip: {{
-            mode: "index",
-            intersect: false,
-            callbacks: {{
-              title: (items) => `Strike $${{strikes[items[0].dataIndex]}}`,
-              label(ctx) {{
-                const s = strikes[ctx.dataIndex];
-                const d = byStrike[s] ?? {{}};
-                if (ctx.dataset.label === "Call OI") {{
-                  return d.call > 0
-                    ? `Call OI: ${{d.call.toLocaleString()}} | Vol: ${{d.callVol.toLocaleString()}}${{d.callSig ? " | " + d.callSig : ""}}`
-                    : null;
-                }} else {{
-                  return d.put > 0
-                    ? `Put  OI: ${{d.put.toLocaleString()}} | Vol: ${{d.putVol.toLocaleString()}}${{d.putSig ? " | " + d.putSig : ""}}`
-                    : null;
-                }}
-              }},
-              filter: item => item.parsed.y > 0,
-            }},
-            backgroundColor: "#1a1d27", borderColor: "#2e3250", borderWidth: 1,
-            titleColor: "#e2e8f0", bodyColor: "#94a3b8", padding: 8,
-          }},
-        }},
-        scales: {{
-          x: {{
-            stacked: true,
-            ticks: {{ color: "#64748b", font: {{ size: 9 }}, maxRotation: 40 }},
-            grid: {{ color: "#1e2235" }},
-          }},
-          y: {{
-            stacked: true,
-            ticks: {{
-              color: "#64748b",
-              font: {{ size: 9 }},
-              callback: v => v >= 1000 ? (v / 1000).toFixed(0) + "k" : v,
-            }},
-            grid: {{ color: "#1e2235" }},
-          }},
-        }},
-      }},
-    }});
+    const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
     oiCharts[tickerStr].push(chart);
   }});
 
@@ -1124,39 +1345,7 @@ function initOICharts(tickerStr, tickerData) {{
       else                   {{ byStrike[k].put =c.open_interest??0; byStrike[k].putVol =c.volume??0; byStrike[k].putSig =c.signal; }}
     }});
 
-    const chart = new Chart(canvas.getContext("2d"), {{
-      type: "bar",
-      data: {{
-        labels: strikes.map(s => `$${{s}}`),
-        datasets: [
-          {{ label:"Call OI", data:strikes.map(s=>byStrike[s]?.call??0), backgroundColor:"rgba(34,197,94,0.75)", borderColor:"rgba(34,197,94,1)", borderWidth:1, borderRadius:2, stack:"oi" }},
-          {{ label:"Put OI",  data:strikes.map(s=>byStrike[s]?.put??0),  backgroundColor:"rgba(239,68,68,0.75)", borderColor:"rgba(239,68,68,1)",  borderWidth:1, borderRadius:2, stack:"oi" }},
-        ]
-      }},
-      options: {{
-        animation: false, responsive: true, maintainAspectRatio: false,
-        plugins: {{
-          legend: {{ display:true, position:"top", align:"end", labels:{{ color:"#94a3b8", boxWidth:10, font:{{size:9}}, padding:6 }} }},
-          tooltip: {{
-            mode:"index", intersect:false,
-            callbacks: {{
-              title: items => `Strike $${{strikes[items[0].dataIndex]}}`,
-              label(ctx) {{
-                const s=strikes[ctx.dataIndex]; const d=byStrike[s]??{{}};
-                if (ctx.dataset.label==="Call OI") return d.call>0?`Call OI: ${{d.call.toLocaleString()}} | Vol: ${{d.callVol.toLocaleString()}}${{d.callSig?" | "+d.callSig:""}}`:null;
-                return d.put>0?`Put  OI: ${{d.put.toLocaleString()}} | Vol: ${{d.putVol.toLocaleString()}}${{d.putSig?" | "+d.putSig:""}}`:null;
-              }},
-              filter: item => item.parsed.y > 0,
-            }},
-            backgroundColor:"#1a1d27", borderColor:"#2e3250", borderWidth:1, titleColor:"#e2e8f0", bodyColor:"#94a3b8", padding:8,
-          }},
-        }},
-        scales: {{
-          x: {{ stacked:true, ticks:{{color:"#64748b",font:{{size:9}},maxRotation:40}}, grid:{{color:"#1e2235"}} }},
-          y: {{ stacked:true, ticks:{{color:"#64748b",font:{{size:9}},callback:v=>v>=1000?(v/1000).toFixed(0)+"k":v}}, grid:{{color:"#1e2235"}} }},
-        }},
-      }},
-    }});
+    const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
     oiCharts[tickerStr].push(chart);
   }});
 }}

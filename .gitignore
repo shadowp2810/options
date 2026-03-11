@@ -5,11 +5,12 @@ __pycache__/
 keys.env
 *.env
 
-# Ignore all generated report files inside reports/
+# Keep snapshots and all dated reports for historical reference
 reports/*
-
-# Keep the delta snapshot so GitHub Actions carries it between daily runs
 !reports/latest_analysis.json
+!reports/weekly_analysis.json
+!reports/options_signals_*.html
+!reports/options_signals_*.xlsx
 
 # docs/ is intentionally tracked (contains CNAME + deployed index.html)
 !docs/
