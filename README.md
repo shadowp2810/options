@@ -140,7 +140,20 @@ Each row shows the top contract's signal and forecasted % for the currently sele
 If a company's earnings date falls within a horizon's window, a ⚠ badge with the exact date appears inline. Earnings can invalidate signals — OI placed before the report may be closed or rolled immediately after.
 
 ### Signal Flip Badge (↺)
-If the top signal changed since the previous day's run (e.g. BUY → SELL), a flip badge appears. These are worth close attention — a shift in where the largest OI sits is a meaningful change in sentiment.
+If a contract's signal changed since the previous day's run (e.g. BUY → SELL), a flip badge appears. These are worth close attention — a shift in where the large OI sits is a meaningful change in sentiment.
+
+The badge only fires on directional flips (BUY ↔ SELL). Transitions involving HEDGE-C or HEDGE-P are ignored — hedges rolling or shifting don't indicate a sentiment reversal.
+
+Rank 2 and 3 contracts can also show the badge, but only when their OI is **within 25% of rank 1's OI** (meaning they're competitive for the top spot). If rank 1 has 50,000 OI and rank 2 has 5,000, a flip on rank 2 is noise and is suppressed.
+
+| Scenario | Flip shown? |
+|---|---|
+| Rank 1 flips BUY → SELL (any OI) | ✅ Always |
+| Rank 2/3 flips, OI ≥ 75% of rank 1 (e.g. 12,000 vs 12,500) | ✅ Competitive — shown |
+| Rank 2/3 flips, OI < 75% of rank 1 (e.g. 5,000 vs 50,000) | ❌ Noise — suppressed |
+| Any rank flips BUY → HEDGE-C/P | ❌ Not a directional flip — ignored |
+
+**Example:** MU is at $370. Monday's top contract is the $400 Call (OI 22,000) → **BUY +8.1%**. After a disappointing earnings report, Tuesday's top contract shifts to the $320 Put (OI 35,000) → **SELL −7.2% ↺**. The ↺ tells you this was bullish yesterday and is bearish today.
 
 ---
 

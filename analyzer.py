@@ -288,8 +288,14 @@ def analyze_ticker(
             )
             contract["prev_signal"] = prev_signal
             is_hedge = lambda s: s in ("HEDGE-C", "HEDGE-P")
+            # Allow flip badge on ranks 2 & 3 only when their OI is within 25% of
+            # rank 1 (i.e. they're close enough to be competitive for the top spot).
+            top_oi = contracts[0].get("open_interest") or 0
+            curr_oi = contract.get("open_interest") or 0
+            oi_close_to_top = (rank_idx == 0) or (top_oi > 0 and curr_oi >= top_oi * 0.75)
             contract["signal_flipped"] = (
-                prev_signal is not None
+                oi_close_to_top
+                and prev_signal is not None
                 and curr_signal is not None
                 and prev_signal != curr_signal
                 and not is_hedge(curr_signal)
