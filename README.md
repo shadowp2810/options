@@ -10,12 +10,13 @@ A daily-updated dashboard that scans **S&P 500 IT + Nasdaq-100 stocks** for the 
 
 Every weekday at 4:30 PM ET (after market close), the tool automatically:
 
-1. Fetches the current price for every ticker in the universe (~130 stocks)
-2. Pulls the full options chain from NASDAQ's public API — all expiry dates, all strike prices, with **real Open Interest (OI)** data
-3. For each stock and each time horizon (This Friday, 7 Days, 1 Month, 45 Days, 60 Days, 90 Days, 6 Months, 1 Year), finds the **top 10 contracts ranked by OI**
-4. Classifies each contract as a **BUY, SELL, HEDGE-C, or HEDGE-P** signal based on whether it's in-the-money or out-of-the-money
-5. Calculates the forecasted % move implied by where the money is positioned
-6. Generates an interactive HTML dashboard and pushes it live to GitHub Pages
+1. Fetches the current price and **1-day / 5-day price change** for every ticker (~130 stocks)
+2. Pulls the full options chain from NASDAQ's public API — all expiry dates, all strikes, with **real Open Interest (OI)** and volume
+3. For each stock and each time horizon (This Friday → 1 Year), finds the **top 10 contracts ranked by OI**
+4. Classifies each contract as **BUY, SELL, HEDGE-C, or HEDGE-P** based on moneyness
+5. Calculates forecasted % move implied by where the money is positioned
+6. Computes **OI trend signals** (call OI vs put OI changes vs prior snapshot) to show market sentiment shifts
+7. Generates an interactive HTML dashboard, pushes it live to GitHub Pages, and **archives every day's report**
 
 ---
 
@@ -49,52 +50,97 @@ OI is more meaningful for spotting institutional positioning. A contract with OI
 
 ## Reading the Signals
 
-The dashboard classifies every contract into one of four signals:
+### Contract Signals (shown in the main table)
 
 | Signal | What it is | What it means |
 |---|---|---|
-| **BUY** | Out-of-the-money (OTM) Call | The market is betting the stock goes *up* — someone paid to have the right to buy at a higher price |
-| **SELL** | Out-of-the-money (OTM) Put | The market is betting the stock goes *down* — someone paid to have the right to sell at a lower price |
-| **HEDGE-C** | In-the-money (ITM) Call | Smart money is *covering a short position* — not a directional bet |
-| **HEDGE-P** | In-the-money (ITM) Put | Smart money is *insuring a long position* against downside — they own the stock but are scared |
+| **BUY** | Out-of-the-money (OTM) Call | The market is betting the stock goes *up* |
+| **SELL** | Out-of-the-money (OTM) Put | The market is betting the stock goes *down* |
+| **HEDGE-C** | In-the-money (ITM) Call | Smart money covering a profitable short position |
+| **HEDGE-P** | In-the-money (ITM) Put | Smart money insuring a long position against downside |
 
-**Example:** If TSLA is trading at $400 and there's huge OI on the $460 Call expiring in 7 days — that's a BUY signal with a forecasted +15% move. Someone is betting TSLA reaches $460.
+**Example (BUY):** TSLA is at $400 and there's huge OI on the $460 Call expiring in 7 days. Someone is betting TSLA reaches $460 — forecasted +15% move.
 
-**Example:** If TSLA is trading at $400 and there's massive OI on the $350 Put — that's a HEDGE-P. A fund that owns 1 million TSLA shares is worried the stock might crash. They bought the right to *sell* at $350, so even if TSLA drops to $200, they can still sell at $350 and limit their loss. They're not betting TSLA goes down — they already own it and are buying insurance.
+**Example (SELL):** TSLA is at $400 and there's massive OI on the $340 Put expiring this Friday. Someone expects a significant drop — forecasted −15% move.
 
-**Example:** If MSFT is trading at $408 and there's huge OI on the $350 Call — that's a HEDGE-C. A hedge fund that shorted MSFT at $350 is now deeply underwater and bought these calls to cap their losses if the stock keeps rising. They're not betting on upside; they're limiting their downside on a bad short.
+**Example (HEDGE-P):** TSLA is at $400 and there's massive OI on the $350 Put. A fund that owns 1 million TSLA shares bought the right to *sell* at $350 as insurance. If TSLA drops to $200, they can still sell at $350 and limit losses. They're not betting it goes down — they already own it and are hedging.
+
+**Example (HEDGE-C):** MSFT is at $408 and there's huge OI on the $350 Call. A hedge fund that shorted MSFT at $350 is now underwater. They bought calls to cap further losses if the stock keeps rising. Not a bullish bet — it's limiting the pain on a bad short.
+
+---
+
+### OI Trend Signals (shown in the expanded view)
+
+These appear in the trend bar when you expand a ticker row. They compare today's total call OI and put OI against a prior snapshot, combined with the current price direction, to derive a directional interpretation.
+
+| Signal | Condition | What it means |
+|---|---|---|
+| **Bullish** | C↑ + P↓ + Price↑ | New money entering on the upside |
+| **Bearish** | P↑ + C↓ + Price↓ | New money entering on the downside |
+| **Hedged Rally** | P↑ + Price↑ | Stock rising but institutions buying downside protection |
+| **Short Covering** | C↑ + Price↓ | Price falling but call OI rising — shorts may be exiting |
+| **Build-Up** | C↑ + P↑ | Both sides adding positions — big move expected, direction unclear |
+| **Unwinding** | C↓ + P↓ | Both sides closing — calm period or near expiry |
+
+**Significance thresholds:** A signal only fires when the OI change is **both ≥ 5% and ≥ 500 contracts**. Smaller moves are shown as flat (→) to avoid noise from a single order.
+
+**Comparison windows by horizon:**
+
+| Horizon | OI compared against | Price direction used |
+|---|---|---|
+| This Friday, 7 Days | Yesterday's snapshot | 1-day price change |
+| 30D, 45D, 60D, 90D | 7-day-old snapshot | 5-day price change |
+| 180D, 1Y | Not compared — totals shown only | — |
+
+Shorter-dated options move daily and react to near-term catalysts, so yesterday is the right reference. Longer-dated options build positions slowly — a single day's OI change is noise; a week's shift is meaningful.
 
 ---
 
 ## Dashboard Walkthrough
 
 ### Header Bar
-Shows how many Buy/Sell/Hedge signals exist across all tickers and all time horizons. The "Δ vs yesterday" indicator shows whether signals have changed since the previous day's run.
+Shows how many Buy/Sell/Hedge signals exist across all tickers and time horizons. Also displays the snapshot age so you know how fresh the data is.
 
 ### Period Pills (This Friday / 7 Days / 1 Month / …)
-Switches which time horizon is shown in the main table. The date shown below each pill is the actual expiry date that was matched.
+Switches which time horizon is shown in the main table. The date shown below each pill is the actual expiry date that was matched. Selecting a period also highlights that column in the All Tickers table.
 
 ### Signal Filter
 Narrows the table to only show tickers where the top contract for the selected period is BUY, SELL, HEDGE-C, or HEDGE-P.
 
 ### Min OI Filter
-Dims or hides contracts below your minimum OI threshold. Use **1K+** as your baseline — anything below 1,000 OI isn't worth serious attention.
+Dims contracts below your minimum OI threshold. Use **1K+** as your baseline — anything below 1,000 OI isn't worth serious attention.
 
-### Main Chart
-Bar chart of forecasted % moves for the selected period. Green = BUY, Red = SELL, Orange = HEDGE. Hover any bar for the full contract details.
+### Main Bar Chart
+Forecasted % moves for the selected period. Green = BUY, Red = SELL, Orange = HEDGE. Hover any bar for full contract details.
 
 ### All Tickers Table
-- Click any row to expand it
-- The expanded view shows all 8 time horizons at once
-- Each horizon shows the **top 3 contracts by OI** with signal, forecast %, and delta badges
-- Below each horizon block is a **stacked bar chart**: green = call OI, red = put OI, grouped by strike — lets you see at a glance which strikes have the highest combined open interest
-- Tickers with Mon/Wed expiries (e.g. TSLA, AAPL) show an **Intra-week Expiries** section with the same layout
+Each row shows the top contract's signal and forecasted % for the currently selected period.
 
-### Earnings Flag
-If a company's earnings date falls within a horizon's window, a ⚠ badge appears. Earnings announcements can invalidate the signal entirely — the OI from before earnings may reflect positions that get closed or rolled.
+**Expanding a row** reveals:
+
+- **Company name, sector, industry**
+- **Price trend bar:**
+  `PRICE  1D: ▲ +2.1%  5D: ▼ −3.4%`
+- **OI trend bar** with labelled sections:
+  - `OI VS YESTERDAY` — Fri and 7D pills showing call/put OI change vs yesterday
+  - `OI VS 7 DAYS AGO` — 30D–90D pills showing call/put OI change vs one week ago
+  - `LONG-DATED OI` — 180D/1Y showing raw call/put OI totals (no % trend)
+  - Each pill that crosses the significance threshold shows a **combo badge** (Bullish / Bearish / Hedged Rally / Short Covering / Build-Up / Unwinding)
+  - Hovering a pill shows the exact % change and which comparison window was used
+- **8 horizon blocks** (This Friday → 1 Year), each showing:
+  - Top 3 contracts by OI with signal, forecast %, OI count, volume, and delta badges
+  - Earnings-in-window flag (⚠) if an earnings date falls before expiry
+  - **Stacked bar chart** (calls = green, puts = red) for the top 10 contracts by OI:
+    - X-axis uses **proportional spacing** — strikes that are far apart appear far apart visually, so clusters are immediately visible
+    - A **dashed amber line** marks the current stock price (instant OTM/ITM boundary)
+    - Hover any bar for OI, volume, and signal details
+- **Intra-week Expiries** — for hyper-liquid stocks (TSLA, AAPL, etc.) that have Mon/Tue/Wed/Thu expiries, these appear as a separate section with the same layout
+
+### Earnings Flag (⚠)
+If a company's earnings date falls within a horizon's window, a ⚠ badge with the exact date appears inline. Earnings can invalidate signals — OI placed before the report may be closed or rolled immediately after.
 
 ### Signal Flip Badge (↺)
-If a ticker's top signal changed since the previous day's run (e.g. was BUY, now is SELL), a flip badge appears. These are worth paying close attention to.
+If the top signal changed since the previous day's run (e.g. BUY → SELL), a flip badge appears. These are worth close attention — a shift in where the largest OI sits is a meaningful change in sentiment.
 
 ---
 
@@ -102,20 +148,21 @@ If a ticker's top signal changed since the previous day's run (e.g. was BUY, now
 
 ```
 options/
-├── main.py              # Entry point — orchestrates everything
-├── universe.py          # List of tickers (S&P 500 IT + Nasdaq-100)
-├── fetcher.py           # Fetches price, earnings, company info via yfinance
-├── nasdaq_fetcher.py    # Fetches options chain (OI + volume) from NASDAQ public API
-├── analyzer.py          # Core logic: finds top contracts, classifies signals, computes forecasts
-├── exporter_html.py     # Generates the self-contained interactive HTML dashboard
+├── main.py              # Entry point — orchestrates fetch → analyze → export
+├── universe.py          # Ticker lists (S&P 500 IT + Nasdaq-100)
+├── fetcher.py           # Price, price history (1D/5D), earnings, company info (yfinance)
+├── nasdaq_fetcher.py    # Full options chain (OI + volume) from NASDAQ public API
+├── analyzer.py          # Top contracts, signals, forecasts, OI trends, deltas
+├── exporter_html.py     # Self-contained interactive HTML dashboard (Chart.js)
 ├── requirements.txt     # Python dependencies
 ├── docs/
-│   └── index.html       # Latest report — served by GitHub Pages
+│   └── index.html       # Latest report — served by GitHub Pages at options.pranavp.dev
 ├── reports/
-│   ├── latest_analysis.json          # Snapshot used for delta comparison
-│   └── options_signals_*.html/xlsx   # All generated reports (gitignored)
+│   ├── latest_analysis.json          # Daily snapshot for OI delta computation
+│   ├── weekly_analysis.json          # Weekly snapshot for 30D–90D OI comparison
+│   └── options_signals_YYYYMMDD_HHMM.{html,xlsx}  # Archived daily reports
 └── .github/workflows/
-    └── daily_report.yml  # GitHub Actions — runs at 4:30 PM ET on weekdays
+    └── daily_report.yml  # Runs at 4:30 PM ET every weekday
 ```
 
 ---
@@ -126,8 +173,8 @@ options/
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/shadowp2810/options-dashboard.git
-cd options-dashboard
+git clone https://github.com/shadowp2810/options.git
+cd options
 
 # 2. Install dependencies
 pip install -r requirements.txt
@@ -139,48 +186,66 @@ python main.py --tickers AAPL TSLA MSFT NVDA
 python main.py
 
 # 5. Open the generated HTML in your browser
-open reports/options_signals_*.html
+open reports/options_signals_*.html   # macOS
 ```
 
-The `--tickers` flag is useful for quick testing or focusing on specific stocks you care about.
+The `--tickers` flag is useful for quick testing or focusing on specific stocks.
 
 ---
 
 ## How the Data Pipeline Works
 
 ```
-yfinance (price, earnings, company info)
-       +
-NASDAQ Public API (full options chain: all expiries × all strikes × OI + volume)
-       ↓
+yfinance
+  → current price
+  → 1-day & 5-day price history
+  → earnings date
+  → company name / sector / industry
+
+NASDAQ Public API (one call per ticker)
+  → full options chain: all expiries × all strikes × OI + volume
+
 analyzer.py
-  → For each ticker × each horizon:
-      find the nearest expiry date
-      rank all contracts by Open Interest
-      take top 10
-      classify signal (BUY/SELL/HEDGE-C/HEDGE-P)
+  → for each ticker × horizon:
+      find nearest expiry date
+      sum total call OI + put OI for that expiry (stable baseline)
+      rank all contracts by OI → take top 10
+      classify BUY / SELL / HEDGE-C / HEDGE-P
       calculate forecasted % move
-      compare to yesterday's snapshot → compute deltas
-       ↓
-exporter_html.py → self-contained HTML dashboard (Chart.js embedded)
-main.py          → Excel report (.xlsx) with color-coded cells
+      compare vs daily snapshot  → OI trend for Fri / 7D
+      compare vs weekly snapshot → OI trend for 30D–90D
+      derive combo signal (Bullish / Bearish / Hedged Rally / …)
+      compare contracts vs yesterday's → strike delta + signal flip
+
+exporter_html.py → self-contained HTML (all data embedded as JSON)
+main.py          → Excel report (.xlsx) with colour-coded cells
 ```
 
 ---
 
 ## How the Daily Auto-Deploy Works
 
-A GitHub Actions workflow (`.github/workflows/daily_report.yml`) runs every weekday at **9:30 PM UTC (4:30 PM ET)** — 30 minutes after NYSE closes so final OI settles.
+A GitHub Actions workflow runs every weekday at **9:30 PM UTC (4:30 PM ET)**:
 
 ```
-GitHub Actions (free, runs in the cloud)
-  → python main.py        (generates HTML + saves snapshot)
-  → copies HTML to docs/index.html
-  → git commit + git push
+GitHub Actions (free tier, cloud)
+  → python main.py
+      generates HTML + Excel
+      saves / refreshes latest_analysis.json (daily snapshot)
+      saves / refreshes weekly_analysis.json (refreshes every 7 days)
+  → copies latest HTML to docs/index.html
+  → git commit + git push:
+      docs/index.html              ← live dashboard
+      reports/latest_analysis.json ← daily snapshot
+      reports/weekly_analysis.json ← weekly snapshot
+      reports/options_signals_*.html ← permanent archive
+      reports/options_signals_*.xlsx ← permanent archive
   → GitHub Pages serves docs/index.html at options.pranavp.dev
 ```
 
-**To trigger a manual run:** Go to your GitHub repo → Actions tab → "Daily Options Report" → "Run workflow".
+**Manual run:** GitHub repo → Actions tab → "Daily Options Report" → "Run workflow".
+
+**Archive:** Every day's HTML and Excel are committed to the repo. You can browse historical reports directly on GitHub or clone the repo to access any past day.
 
 ---
 
@@ -188,17 +253,19 @@ GitHub Actions (free, runs in the cloud)
 
 | Data | Source | Notes |
 |---|---|---|
-| Stock price | Yahoo Finance (yfinance) | Real-time during market hours |
-| Options chain, OI, Volume | NASDAQ public API | ~15 min delayed during market hours; OI is always previous-day close |
+| Stock price | Yahoo Finance (yfinance) | ~15 min delayed |
+| Price history (1D, 5D) | Yahoo Finance | Used for OI trend signal direction |
+| Options chain, OI, Volume | NASDAQ public API | OI is always previous-day close |
 | Earnings dates | Yahoo Finance | Best-effort; may occasionally be off by a day |
-| Company name / sector | Yahoo Finance | Used in expanded view only |
+| Company name / sector | Yahoo Finance | Used in expanded view |
 
-**Important limitations to keep in mind:**
+**Important limitations:**
 
-- **OI is always from the previous close.** Exchanges publish OI once per day. Even a "real-time" paid API gives you yesterday's OI.
-- **The data is a snapshot, not a live feed.** It runs once at market close. If a major event happens mid-day (e.g. earnings surprise), the dashboard won't reflect it until the next run.
-- **High OI ≠ guaranteed move.** It means someone has a large position. That position could be a hedge, a spread, or an institutional algo. Use signals as one input among many — never as the sole reason to trade.
-- **Earnings change everything.** If earnings fall within a horizon, the pre-earnings OI was placed before the report. Post-earnings, contracts get repriced and OI shifts dramatically.
+- **OI is always from the previous close.** Exchanges publish OI once per day. Even paid real-time APIs give you yesterday's OI.
+- **The data is a snapshot, not a live feed.** It runs once at market close. If a major event happens mid-day, the dashboard won't reflect it until the next run.
+- **High OI ≠ guaranteed move.** It means someone has a large position — which could be a hedge, a spread, or an institutional algo. Use signals as one input among many.
+- **Earnings change everything.** OI placed before an earnings report may be closed or rolled immediately after. The ⚠ flag is your warning.
+- **OI trend signals need a reference snapshot.** On the very first run (or after a long gap), OI vs Yesterday / vs 7 Days Ago will show `—` until a valid prior snapshot exists. The weekly comparison starts working 5 days after the first run.
 
 ---
 
@@ -206,14 +273,16 @@ GitHub Actions (free, runs in the cloud)
 
 | Term | Meaning |
 |---|---|
-| **Strike price** | The price at which the option contract gives the right to buy/sell |
+| **Strike price** | The price at which the option gives the right to buy/sell |
 | **Expiry** | The date the contract expires — after this it's worthless |
 | **Call** | Right to *buy* a stock at the strike price |
 | **Put** | Right to *sell* a stock at the strike price |
-| **OTM (Out of the Money)** | For a call: strike is *above* current price. For a put: strike is *below*. The stock has to move for the option to have value. |
-| **ITM (In the Money)** | For a call: strike is *below* current price. For a put: strike is *above*. The option already has intrinsic value. |
-| **Open Interest (OI)** | Total number of contracts currently open (not yet settled) |
+| **OTM (Out of the Money)** | Call: strike above current price. Put: strike below. Stock must move for the option to have value. |
+| **ITM (In the Money)** | Call: strike below current price. Put: strike above. Option already has intrinsic value. |
+| **Open Interest (OI)** | Total contracts currently open (not yet settled) |
 | **Volume** | Contracts traded today |
-| **Forecast %** | How far the stock would need to move to reach the strike from current price |
-| **LEAPS** | Long-dated options (1 year+) — often used for large institutional bets |
-| **Smart money** | Institutional investors (hedge funds, banks, large traders) whose large positions show up as high OI |
+| **Forecast %** | How far the stock must move from current price to reach the strike |
+| **LEAPS** | Long-dated options (1 year+) — often large institutional bets |
+| **Smart money** | Institutional investors (hedge funds, banks) whose large positions show up as high OI |
+| **OI Trend** | Change in total call or put OI vs a prior snapshot — used to detect new positioning |
+| **Combo signal** | Derived from (call OI trend) + (put OI trend) + (price direction) — e.g. Bullish, Bearish, Hedged Rally |
