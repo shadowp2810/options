@@ -1444,6 +1444,11 @@ document.getElementById("table-body").addEventListener("click", e => {{
       oiCharts[ticker].forEach(c => {{ try {{ c.destroy(); }} catch(e) {{}} }});
       delete oiCharts[ticker];
     }}
+    // Clear the cell so re-expanding always does a full rebuild.
+    // Without this, the canvas elements remain in the DOM but have no Chart.js
+    // instance attached, leaving blank charts on the next expand.
+    const cell = detailRow.querySelector("td");
+    if (cell) cell.innerHTML = "";
   }}
 }});
 
