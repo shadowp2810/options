@@ -75,12 +75,14 @@ These appear in the trend bar when you expand a ticker row. They compare today's
 
 | Signal | Condition | What it means |
 |---|---|---|
+| **Build-Up** | C↑ + P↑ | Both sides adding — big move expected, direction unclear |
+| **Unwinding** | C↓ + P↓ | Both sides closing — calm period or near expiry |
 | **Bullish** | C↑ + P↓ + Price↑ | New money entering on the upside |
 | **Bearish** | P↑ + C↓ + Price↓ | New money entering on the downside |
 | **Hedged Rally** | P↑ + Price↑ | Stock rising but institutions buying downside protection |
 | **Short Covering** | C↑ + Price↓ | Price falling but call OI rising — shorts may be exiting |
-| **Build-Up** | C↑ + P↑ | Both sides adding positions — big move expected, direction unclear |
-| **Unwinding** | C↓ + P↓ | Both sides closing — calm period or near expiry |
+
+> **Priority:** Build-Up and Unwinding (when *both* sides agree) are always checked first. Short Covering only fires when calls are rising but puts are *not* — if both are rising it's Build-Up, not Short Covering.
 
 **Significance thresholds:** A signal only fires when the OI change is **both ≥ 5% and ≥ 500 contracts**. Smaller moves are shown as flat (→) to avoid noise from a single order.
 
@@ -102,7 +104,17 @@ Shorter-dated options move daily and react to near-term catalysts, so yesterday 
 Shows how many Buy/Sell/Hedge signals exist across all tickers and time horizons. Also displays the snapshot age so you know how fresh the data is.
 
 ### Period Pills (This Friday / 7 Days / 1 Month / …)
-Switches which time horizon is shown in the main table. The date shown below each pill is the actual expiry date that was matched. Selecting a period also highlights that column in the All Tickers table.
+Switches which time horizon is shown in the main table. The date shown below each pill is the actual expiry date that was matched. Selecting a period also highlights that column in the All Tickers table. **This Friday is selected by default** — the most immediately actionable horizon.
+
+### Quick Sort Bar
+Sits just above the table. Two one-click sorts:
+
+| Button | What it does |
+|---|---|
+| **⚡ Fri Call OI vs Yesterday** | Floats tickers with the largest absolute % change in Friday call OI since yesterday to the top |
+| **⚡ Fri Put OI vs Yesterday** | Same for Friday put OI |
+
+Click again to deactivate (returns to default sort). Clicking a column header also clears the quick sort.
 
 ### Signal Filter
 Narrows the table to only show tickers where the top contract for the selected period is BUY, SELL, HEDGE-C, or HEDGE-P.
@@ -119,22 +131,25 @@ Each row shows the top contract's signal and forecasted % for the currently sele
 **Expanding a row** reveals:
 
 - **Company name, sector, industry**
-- **Price trend bar:**
-  `PRICE  1D: ▲ +2.1%  5D: ▼ −3.4%`
-- **OI trend bar** with labelled sections:
-  - `OI VS YESTERDAY` — Fri and 7D pills showing call/put OI change vs yesterday
-  - `OI VS 7 DAYS AGO` — 30D–90D pills showing call/put OI change vs one week ago
-  - `LONG-DATED OI` — 180D/1Y showing raw call/put OI totals (no % trend)
+- **Price trend bar** (one line per section):
+  - `Price  1D: ▲ +2.1%   5D: ▼ −3.4%`
+  - `OI vs Yesterday` — Fri and 7D pills showing call/put OI change since the previous day
+  - `OI vs 7 Days Ago` — 30D–90D pills showing call/put OI change vs one week ago
   - Each pill that crosses the significance threshold shows a **combo badge** (Bullish / Bearish / Hedged Rally / Short Covering / Build-Up / Unwinding)
-  - Hovering a pill shows the exact % change and which comparison window was used
-- **8 horizon blocks** (This Friday → 1 Year), each showing:
+  - 180D and 1Y horizons are omitted from the trend bar (OI trends at those durations are too slow to be meaningful day-to-day)
+  - Hovering a pill shows the exact % change and the comparison window used
+- **8 horizon blocks** (This Friday → 1 Year) arranged in a **4-column grid** (row 1: Fri / 7D / 30D / 45D, row 2: 60D / 90D / 180D / 1Y), each showing:
   - Top 3 contracts by OI with signal, forecast %, OI count, volume, and delta badges
-  - Earnings-in-window flag (⚠) if an earnings date falls before expiry
-  - **Stacked bar chart** (calls = green, puts = red) for the top 10 contracts by OI:
-    - X-axis uses **proportional spacing** — strikes that are far apart appear far apart visually, so clusters are immediately visible
-    - A **dashed amber line** marks the current stock price (instant OTM/ITM boundary)
+  - Earnings-in-window flag (⚠) with exact date if earnings falls before expiry
+  - **Stacked bar chart** (calls = green, puts = red) for top 10 contracts by OI:
+    - X-axis uses **proportional spacing** — strikes further apart appear further apart visually
+    - A **dashed amber line** marks the current stock price (OTM/ITM boundary at a glance)
     - Hover any bar for OI, volume, and signal details
-- **Intra-week Expiries** — for hyper-liquid stocks (TSLA, AAPL, etc.) that have Mon/Tue/Wed/Thu expiries, these appear as a separate section with the same layout
+  - **OI Momentum chart** — a line chart showing day-by-day OI progression for the top 8 strikes over the past week (calls = solid green lines, puts = dashed red lines). Each line is labelled at its last data point (e.g. `$220 C`). This reveals *rising stars* — strikes rapidly accumulating new OI mid-week that may soon overtake the current leader. A **⤢ Expand** button opens it near-fullscreen for a closer look.
+- **Intra-week Expiries** — for hyper-liquid stocks (TSLA, AAPL, etc.) that have Mon/Tue/Wed/Thu expiries, these appear as a separate swipeable section with the same layout
+
+### Top Scrollbar
+A mirrored horizontal scrollbar sits above the table as well as below it. On Windows (where you need to drag the scrollbar rather than use touch gestures) you can use either one.
 
 ### Earnings Flag (⚠)
 If a company's earnings date falls within a horizon's window, a ⚠ badge with the exact date appears inline. Earnings can invalidate signals — OI placed before the report may be closed or rolled immediately after.
@@ -173,6 +188,7 @@ options/
 ├── reports/
 │   ├── latest_analysis.json          # Daily snapshot for OI delta computation
 │   ├── weekly_analysis.json          # Weekly snapshot for 30D–90D OI comparison
+│   ├── strike_history.json           # Rolling 7-day per-strike OI history (momentum chart)
 │   └── options_signals_YYYYMMDD_HHMM.{html,xlsx}  # Archived daily reports
 └── .github/workflows/
     └── daily_report.yml  # Runs at 4:30 PM ET every weekday
@@ -227,8 +243,15 @@ analyzer.py
       calculate forecasted % move
       compare vs daily snapshot  → OI trend for Fri / 7D
       compare vs weekly snapshot → OI trend for 30D–90D
-      derive combo signal (Bullish / Bearish / Hedged Rally / …)
+      derive combo signal (Build-Up / Unwinding checked first, then
+        Bullish / Bearish / Hedged Rally / Short Covering)
       compare contracts vs yesterday's → strike delta + signal flip
+
+main.py
+  → for each ticker × distinct expiry:
+      record top 20 strikes (by combined OI) into strike_history.json
+      append today's snapshot, keep rolling 7-day window
+      attach history to each ticker's expiry_history for HTML rendering
 
 exporter_html.py → self-contained HTML (all data embedded as JSON)
 main.py          → Excel report (.xlsx) with colour-coded cells
@@ -251,6 +274,7 @@ GitHub Actions (free tier, cloud)
       docs/index.html              ← live dashboard
       reports/latest_analysis.json ← daily snapshot
       reports/weekly_analysis.json ← weekly snapshot
+      reports/strike_history.json  ← rolling strike OI history
       reports/options_signals_*.html ← permanent archive
       reports/options_signals_*.xlsx ← permanent archive
   → GitHub Pages serves docs/index.html at options.pranavp.dev
@@ -279,6 +303,7 @@ GitHub Actions (free tier, cloud)
 - **High OI ≠ guaranteed move.** It means someone has a large position — which could be a hedge, a spread, or an institutional algo. Use signals as one input among many.
 - **Earnings change everything.** OI placed before an earnings report may be closed or rolled immediately after. The ⚠ flag is your warning.
 - **OI trend signals need a reference snapshot.** On the very first run (or after a long gap), OI vs Yesterday / vs 7 Days Ago will show `—` until a valid prior snapshot exists. The weekly comparison starts working 5 days after the first run.
+- **OI Momentum chart fills in over the week.** On day 1 you'll see a single dot per strike. By Thursday/Friday you'll have 5 data points and can clearly see which strikes are accumulating OI fastest. A strike that enters the top 20 mid-week will appear from that day forward.
 
 ---
 
