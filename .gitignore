@@ -9,6 +9,7 @@ keys.env
 reports/*
 !reports/latest_analysis.json
 !reports/weekly_analysis.json
+!reports/strike_history.json
 !reports/options_signals_*.html
 !reports/options_signals_*.xlsx
 

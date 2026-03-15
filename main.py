@@ -447,7 +447,83 @@ def main():
         suppress_delta=snapshot_info["suppressed"],
     )
 
-    # Step 3: Build detail rows
+    # Step 3: Build / update rolling strike-history and attach to analyzed
+    strike_history_path = reports_dir / "strike_history.json"
+    HISTORY_MAX_DAYS    = 7
+    HISTORY_TOP_STRIKES = 20
+
+    # Load existing history
+    strike_history: dict = {}
+    if strike_history_path.exists():
+        try:
+            with open(strike_history_path) as f:
+                strike_history = json.load(f)
+        except Exception as e:
+            print(f"[WARN] Could not load strike history: {e}")
+
+    today_str = date.today().isoformat()
+
+    for ticker_data in analyzed:
+        ticker  = ticker_data["ticker"]
+        chains  = fetch_results.get(ticker, {}).get("chains", {})
+        if ticker not in strike_history:
+            strike_history[ticker] = {}
+
+        # Collect distinct expiries referenced by this ticker's horizons
+        expiries_needed = {
+            hd["expiry"]
+            for hd in ticker_data.get("horizons", {}).values()
+            if hd.get("expiry")
+        }
+
+        # Drop stale expiries (already past)
+        strike_history[ticker] = {
+            exp: hist for exp, hist in strike_history[ticker].items()
+            if exp >= today_str
+        }
+
+        for expiry in expiries_needed:
+            if expiry not in chains:
+                continue
+            chain_df = chains[expiry].copy()
+            chain_df["openInterest"] = pd.to_numeric(
+                chain_df["openInterest"], errors="coerce"
+            ).fillna(0)
+
+            # Top HISTORY_TOP_STRIKES by combined call+put OI
+            strike_totals = chain_df.groupby("strike")["openInterest"].sum()
+            top_strikes   = strike_totals.nlargest(HISTORY_TOP_STRIKES).index.tolist()
+
+            strike_snap: dict[str, dict] = {}
+            for s in top_strikes:
+                sdf = chain_df[chain_df["strike"] == s]
+                call_oi = int(sdf[sdf["type"].str.lower() == "call"]["openInterest"].sum())
+                put_oi  = int(sdf[sdf["type"].str.lower() == "put"]["openInterest"].sum())
+                strike_snap[str(s)] = {"call": call_oi, "put": put_oi}
+
+            hist_list = strike_history[ticker].get(expiry, [])
+            entry = {"date": today_str, "strikes": strike_snap}
+            if hist_list and hist_list[-1]["date"] == today_str:
+                hist_list[-1] = entry   # replace today's entry (re-run same day)
+            else:
+                hist_list.append(entry)
+            strike_history[ticker][expiry] = hist_list[-HISTORY_MAX_DAYS:]
+
+        # Attach history to ticker_data so the HTML can render it
+        ticker_data["expiry_history"] = {
+            expiry: strike_history[ticker].get(expiry, [])
+            for expiry in expiries_needed
+        }
+
+    # Save updated history
+    try:
+        with open(strike_history_path, "w") as f:
+            json.dump(strike_history, f, default=str)
+        print(f"Strike history saved: {strike_history_path}")
+    except Exception as e:
+        print(f"[WARN] Could not save strike history: {e}")
+
+    # Step 4: Build detail rows
     detail_rows = build_detail_rows(analyzed)
     print(f"Detail rows: {len(detail_rows)}")
 

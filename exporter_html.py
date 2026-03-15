@@ -157,12 +157,17 @@ def write_html(
     padding: 8px 20px 9px;
     border-bottom: 1px solid var(--border);
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 14px;
+    flex-direction: column;
+    gap: 5px;
     font-size: 11px;
     color: var(--text-muted);
     background: rgba(255,255,255,0.02);
+  }}
+  .trend-bar-row {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
   }}
   .trend-section-label {{ font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.07em; }}
   .trend-val {{ font-weight: 700; font-size: 11px; }}
@@ -176,6 +181,16 @@ def write_html(
     background: var(--surface2); border: 1px solid var(--border);
     border-radius: 6px; padding: 3px 7px;
     font-size: 10px;
+  }}
+  @media (max-width: 600px) {{
+    .trend-bar-row {{
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }}
+    .oi-horizon-group {{
+      width: fit-content;
+    }}
   }}
   .oi-horizon-label {{ font-weight: 700; color: var(--text-muted); margin-right: 2px; }}
   .oi-side {{ font-weight: 700; }}
@@ -198,6 +213,24 @@ def write_html(
   .intraweek-header {{ font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #818cf8; margin-bottom: 8px; }}
   .intraweek-blocks {{ display: flex; flex-wrap: wrap; gap: 8px; }}
   .intraweek-block {{ background: #13162a; border: 1px solid #2a2d4a; border-radius: 8px; padding: 8px 10px; min-width: 160px; flex: 0 0 auto; }}
+  @media (max-width: 600px) {{
+    .intraweek-section {{
+      max-width: calc(100vw - 32px);
+      overflow: hidden;
+    }}
+    .intraweek-blocks {{
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory;
+      padding-bottom: 8px;
+    }}
+    .intraweek-block {{
+      flex: 0 0 82vw;
+      min-width: 0;
+      scroll-snap-align: start;
+    }}
+  }}
   .intraweek-block-header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
   .intraweek-day {{ font-size: 11px; font-weight: 700; color: #818cf8; }}
   .intraweek-expiry {{ font-size: 10px; color: var(--text-dim); }}
@@ -293,6 +326,13 @@ def write_html(
   .legend-item .combo-badge {{ flex-shrink: 0; margin-top: 1px; }}
   .legend-desc strong {{ color: var(--text); }}
   .table-wrap {{ overflow-x: auto; }}
+  .table-scroll-top {{
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 12px;
+    /* only show when content actually overflows */
+  }}
+  .table-scroll-top-inner {{ height: 1px; }}
   table {{
     width: 100%;
     border-collapse: collapse;
@@ -398,17 +438,41 @@ def write_html(
   }}
   .detail-inner {{
     padding: 14px 20px;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 260px));
     gap: 16px;
-    flex-wrap: wrap;
+    max-width: min(1120px, calc(100vw - 32px));
+  }}
+  @media (max-width: 600px) {{
+    .detail-inner {{
+      max-width: min(1120px, calc(200vw - 32px));
+    }}
   }}
   .horizon-block {{
-    flex: 1;
-    min-width: 160px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
+    min-width: 0;
+  }}
+  @media (max-width: 1000px) {{
+    .detail-inner {{ grid-template-columns: repeat(2, 1fr); }}
+  }}
+  @media (max-width: 600px) {{
+    .detail-inner {{
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory;
+      gap: 10px;
+      padding-bottom: 10px;
+    }}
+    .horizon-block {{
+      flex: 0 0 82vw;
+      scroll-snap-align: start;
+    }}
   }}
   .horizon-block-header {{
     background: var(--surface2);
@@ -469,6 +533,139 @@ def write_html(
     letter-spacing: 0.5px;
     color: var(--text-dim);
     margin-bottom: 4px;
+  }}
+
+  /* ---- OI Momentum line chart ---- */
+  .momentum-chart-wrap {{
+    padding: 6px 10px 14px;
+    height: 170px;
+    position: relative;
+    border-top: 1px solid var(--border);
+    background: rgba(0,0,0,0.08);
+  }}
+  .momentum-chart-label {{
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #a78bfa;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }}
+  .momentum-chart-label::before {{
+    content: "↗";
+    font-size: 10px;
+  }}
+  .momentum-expand-btn {{
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    background: rgba(30,25,50,0.85);
+    border: 1px solid #4c3a8a;
+    border-radius: 4px;
+    color: #a78bfa;
+    font-size: 10px;
+    padding: 2px 7px;
+    cursor: pointer;
+    line-height: 1.6;
+    z-index: 10;
+    transition: background 0.15s, border-color 0.15s;
+  }}
+  .momentum-expand-btn:hover {{
+    background: rgba(167,139,250,0.18);
+    border-color: #7c5cbf;
+  }}
+
+  /* ---- Momentum fullscreen modal ---- */
+  #mom-modal {{
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+  }}
+  #mom-modal.open {{ display: flex; }}
+  #mom-modal-box {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px 24px;
+    width: min(94vw, 1100px);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+  }}
+  #mom-modal-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #a78bfa;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }}
+  #mom-modal-title {{ font-weight: 600; }}
+  #mom-modal-close {{
+    background: none;
+    border: 1px solid #4c3a8a;
+    border-radius: 6px;
+    color: #a78bfa;
+    font-size: 16px;
+    padding: 2px 10px;
+    cursor: pointer;
+    line-height: 1.5;
+  }}
+  #mom-modal-close:hover {{ background: rgba(167,139,250,0.14); }}
+  #mom-modal-canvas-wrap {{
+    flex: 1;
+    min-height: 0;
+    height: min(60vh, 520px);
+    position: relative;
+  }}
+
+  /* ---- Quick sort bar ---- */
+  .quick-sort-bar {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 20px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }}
+  .quick-sort-bar::-webkit-scrollbar {{ display: none; }}
+  .quick-sort-label {{
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }}
+  .quick-sort-btn {{
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }}
+  .quick-sort-btn:hover {{ background: #1e2235; color: var(--text); }}
+  .quick-sort-btn.active {{
+    background: #1e2a4a;
+    border-color: #4a6fa5;
+    color: #93c5fd;
   }}
 
   /* ---- Empty state ---- */
@@ -578,6 +775,18 @@ def write_html(
 </style>
 </head>
 <body>
+<!-- Momentum fullscreen modal (single instance, reused) -->
+<div id="mom-modal" role="dialog" aria-modal="true" aria-labelledby="mom-modal-title">
+  <div id="mom-modal-box">
+    <div id="mom-modal-header">
+      <span id="mom-modal-title">OI Momentum</span>
+      <button id="mom-modal-close" onclick="closeMomModal()" title="Close (Esc)">✕</button>
+    </div>
+    <div id="mom-modal-canvas-wrap">
+      <canvas id="mom-modal-canvas"></canvas>
+    </div>
+  </div>
+</div>
 
 <div class="header">
     <div class="header-left">
@@ -596,8 +805,8 @@ def write_html(
   <div class="control-group">
     <label>Period</label>
     <div class="pill-group" id="period-pills">
-      <button class="pill" data-period="fri">This Friday</button>
-      <button class="pill active" data-period="7d">7 Days</button>
+      <button class="pill active" data-period="fri">This Friday</button>
+      <button class="pill" data-period="7d">7 Days</button>
       <button class="pill" data-period="30d">1 Month</button>
       <button class="pill" data-period="45d">45 Days</button>
       <button class="pill" data-period="60d">60 Days</button>
@@ -698,7 +907,19 @@ def write_html(
         <span class="legend-desc"><strong>C↓ P↓</strong> — both sides closing; calm period or approaching expiry</span>
       </div>
     </div>
-    <div class="table-wrap">
+    <div class="quick-sort-bar">
+      <span class="quick-sort-label">Quick sort:</span>
+      <button class="quick-sort-btn" onclick="applyQuickSort('fri_call_oi', this)">
+        ⚡ Fri Call OI vs Yesterday
+      </button>
+      <button class="quick-sort-btn" onclick="applyQuickSort('fri_put_oi', this)">
+        ⚡ Fri Put OI vs Yesterday
+      </button>
+    </div>
+    <div class="table-scroll-top" id="table-scroll-top">
+      <div class="table-scroll-top-inner" id="table-scroll-top-inner"></div>
+    </div>
+    <div class="table-wrap" id="table-wrap">
       <table id="main-table">
         <thead id="table-head"></thead>
         <tbody id="table-body"></tbody>
@@ -719,7 +940,7 @@ const HORIZON_LABELS = {{"fri":"This Friday","7d":"7 Days","30d":"1 Month","45d"
 const TOP_N = {TOP_N};
 
 let state = {{
-  period: "7d",
+  period: "fri",
   signal: "all",
   search: "",
   minOI: 0,
@@ -803,6 +1024,18 @@ function getVisible() {{
     data.sort((a, b) => state.sortDir * a.ticker.localeCompare(b.ticker));
   }} else if (state.sortCol === "price") {{
     data.sort((a, b) => state.sortDir * ((a.price ?? -Infinity) - (b.price ?? -Infinity)));
+  }} else if (state.sortCol === "fri_call_oi") {{
+    data.sort((a, b) => {{
+      const pctA = Math.abs((a.horizons?.fri?.call_oi_pct) ?? 0);
+      const pctB = Math.abs((b.horizons?.fri?.call_oi_pct) ?? 0);
+      return pctB - pctA;
+    }});
+  }} else if (state.sortCol === "fri_put_oi") {{
+    data.sort((a, b) => {{
+      const pctA = Math.abs((a.horizons?.fri?.put_oi_pct) ?? 0);
+      const pctB = Math.abs((b.horizons?.fri?.put_oi_pct) ?? 0);
+      return pctB - pctA;
+    }});
   }} else if (state.sortCol && state.sortCol.startsWith("pct_")) {{
     const p = state.sortCol.replace("pct_", "");
     data.sort((a, b) => {{
@@ -938,6 +1171,8 @@ function renderTableHead() {{
         state.sortCol = col;
         state.sortDir = col === "ticker" ? 1 : -1;
       }}
+      // clear any active quick-sort button
+      document.querySelectorAll(".quick-sort-btn").forEach(b => b.classList.remove("active"));
       requestAnimationFrame(render);
     }});
   }});
@@ -987,11 +1222,21 @@ function buildDetailCellContent(ticker) {{
         </div>`;
     }}).join("");
 
-    const chartId = `oi-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-${{h}}`;
+    const chartId    = `oi-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-${{h}}`;
+    const momentumId = `mom-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-${{h}}`;
     const chartHtml = contracts.length > 0 ? `
       <div class="oi-chart-wrap">
         <div class="oi-chart-label">Top OI by strike</div>
         <canvas id="${{chartId}}" style="height:125px"></canvas>
+      </div>` : "";
+
+    // OI momentum chart — only if there is expiry history (≥ 1 data point)
+    const histForExpiry = expiry ? (ticker.expiry_history?.[expiry] ?? []) : [];
+    const momentumHtml = histForExpiry.length >= 1 ? `
+      <div class="momentum-chart-wrap">
+        <div class="momentum-chart-label">OI Momentum</div>
+        <button class="momentum-expand-btn" onclick="openMomModal('${{momentumId}}','${{ticker.ticker}} · ${{HORIZON_LABELS[h]}} · OI Momentum')">⤢ Expand</button>
+        <canvas id="${{momentumId}}" style="height:135px"></canvas>
       </div>` : "";
 
     return `<div class="horizon-block">
@@ -1001,6 +1246,7 @@ function buildDetailCellContent(ticker) {{
       </div>
       ${{rankRows}}
       ${{chartHtml}}
+      ${{momentumHtml}}
     </div>`;
   }}).join("");
 
@@ -1147,13 +1393,13 @@ function buildDetailCellContent(ticker) {{
 
   const trendBarHtml = `
     <div class="trend-bar">
-      <span class="trend-section-label">Price</span>
-      <span>1D: ${{p1d.html}}</span>
-      <span>5D: ${{p5d.html}}</span>
-      <span class="trend-sep">·</span>
-      ${{dailyGroupsHtml ? `<span class="trend-section-label">OI vs Yesterday</span> ${{dailyGroupsHtml}}` : ""}}
-      ${{weeklyGroupsHtml ? `<span class="trend-sep">·</span><span class="trend-section-label">OI vs 7 Days Ago</span> ${{weeklyGroupsHtml}}` : ""}}
-      ${{suppressGroupsHtml ? `<span class="trend-sep">·</span><span class="trend-section-label" style="opacity:0.4">Long-dated OI</span> ${{suppressGroupsHtml}}` : ""}}
+      <div class="trend-bar-row">
+        <span class="trend-section-label">Price</span>
+        <span>1D: ${{p1d.html}}</span>
+        <span>5D: ${{p5d.html}}</span>
+      </div>
+      ${{dailyGroupsHtml ? `<div class="trend-bar-row"><span class="trend-section-label">OI vs Yesterday</span> ${{dailyGroupsHtml}}</div>` : ""}}
+      ${{weeklyGroupsHtml ? `<div class="trend-bar-row"><span class="trend-section-label">OI vs 7 Days Ago</span> ${{weeklyGroupsHtml}}</div>` : ""}}
     </div>`;
 
   return `${{metaHtml}}${{trendBarHtml}}<div class="detail-inner">${{h_blocks}}</div>${{intraweekHtml}}`;
@@ -1283,6 +1529,193 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
 }}
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Plugin: label at first data point of each momentum line ──────────────────
+const momentumFirstLabelPlugin = {{
+  id: "momFirstLabel",
+  afterDraw(chart) {{
+    const ctx = chart.ctx;
+    ctx.save();
+    chart.data.datasets.forEach((ds, di) => {{
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      // Find last non-null, non-zero point
+      let lastIdx = -1;
+      for (let i = ds.data.length - 1; i >= 0; i--) {{
+        if (ds.data[i] != null && ds.data[i] > 0) {{ lastIdx = i; break; }}
+      }}
+      if (lastIdx < 0) return;
+      const pt = meta.data[lastIdx];
+      if (!pt) return;
+
+      const isCall = ds.label && ds.label.endsWith(" C");
+      const fontSize = Math.max(8, Math.min(10, chart.chartArea.width / 60));
+      ctx.font = `bold ${{fontSize}}px monospace`;
+      ctx.fillStyle = ds.borderColor;
+
+      // Draw to the right of the last point; fall back to left if near edge
+      const rightEdge = chart.chartArea.right;
+      const labelWidth = ctx.measureText(ds.label).width;
+      const spaceRight = rightEdge - pt.x;
+      if (spaceRight >= labelWidth + 6) {{
+        ctx.textAlign    = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(ds.label, pt.x + 5, pt.y);
+      }} else {{
+        // Not enough room to the right — draw above (call) or below (put)
+        ctx.textAlign = "center";
+        if (isCall) {{
+          ctx.textBaseline = "bottom";
+          ctx.fillText(ds.label, pt.x, pt.y - 4);
+        }} else {{
+          ctx.textBaseline = "top";
+          ctx.fillText(ds.label, pt.x, pt.y + 4);
+        }}
+      }}
+    }});
+    ctx.restore();
+  }}
+}};
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── OI Momentum line chart config ────────────────────────────────────────────
+// Shows how Open Interest for each strike evolves day-by-day over the tracked
+// window (up to 7 days).  Calls are green shades, puts are red shades.
+// A fast-growing strike mid-week (a "rising star") will show a steep upward line.
+function buildMomentumChartConfig(historyArr) {{
+  // historyArr: [{{date:"2026-03-10", strikes:{{"420.0":{{call:x,put:y}}, ...}}}}, ...]
+  if (!historyArr || historyArr.length === 0) return null;
+
+  // Normalize strike keys: Python serialises floats as "220.0" but JS
+  // parseFloat("220.0").toString() === "220" (drops the trailing .0).
+  // Standardise everything to JS float format so lookups always match.
+  const normHist = historyArr.map(e => ({{
+    date: e.date,
+    strikes: Object.fromEntries(
+      Object.entries(e.strikes ?? {{}}).map(([k, v]) => [parseFloat(k).toString(), v])
+    ),
+  }}));
+
+  const dates = normHist.map(e => e.date);
+
+  // Gather all strikes across all days, pick top 8 by latest-day OI (call+put)
+  const latestStrikes = normHist[normHist.length - 1].strikes ?? {{}};
+  const ranked = Object.entries(latestStrikes)
+    .map(([s, d]) => ({{ strike: parseFloat(s), oi: (d.call ?? 0) + (d.put ?? 0), call: d.call ?? 0, put: d.put ?? 0 }}))
+    .filter(x => x.oi > 0)
+    .sort((a, b) => b.oi - a.oi)
+    .slice(0, 8);
+
+  if (ranked.length === 0) return null;
+
+  // Colour palettes: 8 greens for calls, 8 reds for puts
+  const callColors = ["#16a34a","#22c55e","#4ade80","#86efac","#6ee7b7","#34d399","#10b981","#059669"];
+  const putColors  = ["#dc2626","#ef4444","#f87171","#fca5a5","#fb923c","#f97316","#ea580c","#c2410c"];
+
+  const datasets = [];
+  ranked.forEach((item, idx) => {{
+    const sKey = item.strike.toString();  // already normalised via parseFloat above
+    // Call line
+    const callData = dates.map(date => {{
+      const snap = normHist.find(e => e.date === date);
+      const val  = snap?.strikes?.[sKey]?.call ?? null;
+      return val && val > 0 ? val : null;
+    }});
+    // Put line
+    const putData = dates.map(date => {{
+      const snap = normHist.find(e => e.date === date);
+      const val  = snap?.strikes?.[sKey]?.put ?? null;
+      return val && val > 0 ? val : null;
+    }});
+
+    const hasCallData = callData.some(v => v != null && v > 0);
+    const hasPutData  = putData.some(v => v != null && v > 0);
+
+    if (hasCallData) {{
+      datasets.push({{
+        label: `$${{item.strike}} C`,
+        data: callData,
+        borderColor: callColors[idx % callColors.length],
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.25,
+        spanGaps: false,
+      }});
+    }}
+    if (hasPutData) {{
+      datasets.push({{
+        label: `$${{item.strike}} P`,
+        data: putData,
+        borderColor: putColors[idx % putColors.length],
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.25,
+        spanGaps: false,
+      }});
+    }}
+  }});
+
+  if (datasets.length === 0) return null;
+
+  // Friendly date labels (e.g. "Mon 3/10")
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const shortDates = dates.map(d => {{
+    const dt = new Date(d + "T12:00:00");
+    return `${{dayNames[dt.getDay()]}} ${{dt.getMonth()+1}}/${{dt.getDate()}}`;
+  }});
+
+  return {{
+    type: "line",
+    plugins: [momentumFirstLabelPlugin],
+    data: {{ labels: shortDates, datasets }},
+    options: {{
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {{
+        legend: {{ display: false }},
+        tooltip: {{
+          mode: "index",
+          intersect: false,
+          backgroundColor: "#1a1d27",
+          borderColor: "#2e3250",
+          borderWidth: 1,
+          titleColor: "#e2e8f0",
+          bodyColor: "#94a3b8",
+          padding: 8,
+          callbacks: {{
+            label: ctx => {{
+              const v = ctx.parsed.y;
+              if (v == null) return null;
+              return `${{ctx.dataset.label}}: ${{v.toLocaleString()}}`;
+            }},
+            filter: item => item.parsed.y != null && item.parsed.y > 0,
+          }},
+        }},
+      }},
+      scales: {{
+        x: {{
+          ticks: {{ color: "#64748b", font: {{ size: 9 }}, maxRotation: 30 }},
+          grid: {{ color: "#1e2235" }},
+        }},
+        y: {{
+          ticks: {{
+            color: "#64748b",
+            font: {{ size: 9 }},
+            callback: v => v >= 1000 ? (v/1000).toFixed(0)+"k" : v,
+          }},
+          grid: {{ color: "#1e2235" }},
+        }},
+      }},
+    }},
+  }};
+}}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function initOICharts(tickerStr, tickerData) {{
   // Destroy any previous instances for this ticker
   if (oiCharts[tickerStr]) {{
@@ -1322,6 +1755,21 @@ function initOICharts(tickerStr, tickerData) {{
     }});
 
     const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
+    oiCharts[tickerStr].push(chart);
+  }});
+
+  // OI Momentum line charts (one per horizon)
+  HORIZONS.forEach(h => {{
+    const safeId   = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
+    const canvas   = document.getElementById(`mom-chart-${{safeId}}-${{h}}`);
+    if (!canvas) return;
+    const expiry   = tickerData.horizons?.[h]?.expiry;
+    if (!expiry) return;
+    const histArr  = tickerData.expiry_history?.[expiry] ?? [];
+    if (histArr.length === 0) return;
+    const cfg = buildMomentumChartConfig(histArr);
+    if (!cfg) return;
+    const chart = new Chart(canvas.getContext("2d"), cfg);
     oiCharts[tickerStr].push(chart);
   }});
 
@@ -1521,6 +1969,118 @@ function initPillDates() {{
     }}
   }});
 }}
+
+// ---- Momentum modal ----
+let _momModalChart = null;
+
+function openMomModal(sourceCanvasId, title) {{
+  // Find the source canvas and get its Chart.js instance
+  const sourceCanvas = document.getElementById(sourceCanvasId);
+  if (!sourceCanvas) return;
+
+  // Retrieve the config from the source chart
+  let sourceChart = null;
+  for (const charts of Object.values(oiCharts)) {{
+    for (const c of charts) {{
+      if (c.canvas === sourceCanvas) {{ sourceChart = c; break; }}
+    }}
+    if (sourceChart) break;
+  }}
+  if (!sourceChart) return;
+
+  // Update modal title
+  document.getElementById("mom-modal-title").textContent = title || "OI Momentum";
+
+  // Destroy any previous modal chart
+  if (_momModalChart) {{ try {{ _momModalChart.destroy(); }} catch(e) {{}} _momModalChart = null; }}
+
+  // Re-create chart on the modal canvas using the same data/options
+  const modalCanvas = document.getElementById("mom-modal-canvas");
+  const src = sourceChart.config;
+
+  // Deep-clone config so we can tweak font sizes for the larger canvas
+  const modalCfg = JSON.parse(JSON.stringify({{
+    type: src.type,
+    data: src.data,
+    options: src.options,
+  }}));
+
+  // Increase legend/tick font sizes for full-screen view
+  try {{
+    modalCfg.options.scales.x.ticks.font.size = 11;
+    modalCfg.options.scales.x.ticks.maxRotation = 0;
+    modalCfg.options.scales.y.ticks.font.size = 11;
+  }} catch(e) {{}}
+  modalCfg.options.animation = false;
+
+  modalCfg.plugins = [momentumFirstLabelPlugin];
+  _momModalChart = new Chart(modalCanvas.getContext("2d"), modalCfg);
+
+  // Show modal
+  const modal = document.getElementById("mom-modal");
+  modal.classList.add("open");
+  document.body.style.overflow = "hidden";
+}}
+
+function closeMomModal() {{
+  document.getElementById("mom-modal").classList.remove("open");
+  document.body.style.overflow = "";
+  if (_momModalChart) {{ try {{ _momModalChart.destroy(); }} catch(e) {{}} _momModalChart = null; }}
+}}
+
+// Close on backdrop click or Escape key
+document.getElementById("mom-modal").addEventListener("click", e => {{
+  if (e.target === document.getElementById("mom-modal")) closeMomModal();
+}});
+document.addEventListener("keydown", e => {{
+  if (e.key === "Escape") closeMomModal();
+}});
+
+// ---- Quick sort ----
+function applyQuickSort(col, btn) {{
+  const allBtns = document.querySelectorAll(".quick-sort-btn");
+  if (state.sortCol === col) {{
+    // toggle off — back to default
+    state.sortCol = null;
+    allBtns.forEach(b => b.classList.remove("active"));
+  }} else {{
+    state.sortCol = col;
+    allBtns.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  }}
+  render();
+}}
+
+// ---- Top scrollbar mirror ----
+(function() {{
+  const top  = document.getElementById("table-scroll-top");
+  const wrap = document.getElementById("table-wrap");
+  const inner = document.getElementById("table-scroll-top-inner");
+
+  function syncInnerWidth() {{
+    const tableEl = document.getElementById("main-table");
+    if (tableEl) inner.style.width = tableEl.offsetWidth + "px";
+  }}
+
+  let syncingFromTop = false, syncingFromWrap = false;
+  top.addEventListener("scroll", () => {{
+    if (syncingFromWrap) return;
+    syncingFromTop = true;
+    wrap.scrollLeft = top.scrollLeft;
+    syncingFromTop = false;
+  }});
+  wrap.addEventListener("scroll", () => {{
+    if (syncingFromTop) return;
+    syncingFromWrap = true;
+    top.scrollLeft = wrap.scrollLeft;
+    syncingFromWrap = false;
+  }});
+
+  // Update inner width whenever the table re-renders
+  const observer = new MutationObserver(syncInnerWidth);
+  observer.observe(document.getElementById("table-body"), {{ childList: true, subtree: false }});
+  syncInnerWidth();
+}})();
 
 // ---- Init ----
 initPillDates();

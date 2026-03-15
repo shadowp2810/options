@@ -360,12 +360,12 @@ def analyze_ticker(
             p_up = put_oi_trend == "up"
             p_dn = put_oi_trend == "down"
 
-            if c_up and p_dn and price_up:   combo_signal = "Bullish"
+            if c_up and p_up:                combo_signal = "Build-Up"       # both rising — check first
+            elif c_dn and p_dn:              combo_signal = "Unwinding"      # both falling — check first
+            elif c_up and p_dn and price_up: combo_signal = "Bullish"
             elif p_up and c_dn and price_dn: combo_signal = "Bearish"
             elif p_up and price_up:          combo_signal = "Hedged Rally"
             elif c_up and price_dn:          combo_signal = "Short Covering"
-            elif c_up and p_up:              combo_signal = "Build-Up"
-            elif c_dn and p_dn:              combo_signal = "Unwinding"
 
         result["horizons"][label] = {
             "expiry": expiry,
