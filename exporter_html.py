@@ -1644,7 +1644,7 @@ function buildMomentumChartConfig(historyArr) {{
         backgroundColor: "transparent",
         borderWidth: 1.5,
         pointRadius: 3,
-        pointHoverRadius: 5,
+        pointHoverRadius: 3,
         tension: 0.25,
         spanGaps: false,
       }});
@@ -1658,7 +1658,7 @@ function buildMomentumChartConfig(historyArr) {{
         borderWidth: 1.5,
         borderDash: [4, 3],
         pointRadius: 3,
-        pointHoverRadius: 5,
+        pointHoverRadius: 3,
         tension: 0.25,
         spanGaps: false,
       }});
@@ -1684,24 +1684,7 @@ function buildMomentumChartConfig(historyArr) {{
       maintainAspectRatio: false,
       plugins: {{
         legend: {{ display: false }},
-        tooltip: {{
-          mode: "index",
-          intersect: false,
-          backgroundColor: "#1a1d27",
-          borderColor: "#2e3250",
-          borderWidth: 1,
-          titleColor: "#e2e8f0",
-          bodyColor: "#94a3b8",
-          padding: 8,
-          callbacks: {{
-            label: ctx => {{
-              const v = ctx.parsed.y;
-              if (v == null) return null;
-              return `${{ctx.dataset.label}}: ${{v.toLocaleString()}}`;
-            }},
-            filter: item => item.parsed.y != null && item.parsed.y > 0,
-          }},
-        }},
+        tooltip: {{ enabled: false }},
       }},
       scales: {{
         x: {{
