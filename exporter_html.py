@@ -332,11 +332,14 @@ def write_html(
     overflow-x: scroll;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
+    touch-action: pan-x;
   }}
   .table-scroll-top {{
-    overflow-x: auto;
+    overflow-x: scroll;
     overflow-y: hidden;
     height: 12px;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
     /* only show when content actually overflows */
   }}
   .table-scroll-top-inner {{ height: 1px; }}
