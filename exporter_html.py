@@ -39,6 +39,7 @@ def write_html(
     age_days = snapshot_info.get("age_days")
     suppressed = snapshot_info.get("suppressed", False)
     snap_generated = snapshot_info.get("generated")
+    daily_oi_label = snapshot_info.get("daily_oi_label", "yesterday")  # e.g. "Friday", "yesterday"
 
     if suppressed:
         delta_context = f'<span class="delta-stale">⚠ Δ suppressed — snapshot is {age_days}d old (limit: {snapshot_info.get("max_age", 3)}d)</span>'
@@ -222,7 +223,7 @@ def write_html(
       flex-wrap: nowrap;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x mandatory;
+      scroll-snap-type: x proximity;
       padding-bottom: 8px;
     }}
     .intraweek-block {{
@@ -325,7 +326,7 @@ def write_html(
   .legend-item .badge {{ flex-shrink: 0; margin-top: 1px; }}
   .legend-item .combo-badge {{ flex-shrink: 0; margin-top: 1px; }}
   .legend-desc strong {{ color: var(--text); }}
-  .table-wrap {{ overflow-x: auto; }}
+  .table-wrap {{ overflow-x: auto; -webkit-overflow-scrolling: touch; }}
   .table-scroll-top {{
     overflow-x: auto;
     overflow-y: hidden;
@@ -465,7 +466,7 @@ def write_html(
       flex-wrap: nowrap;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x mandatory;
+      scroll-snap-type: x proximity;
       gap: 10px;
       padding-bottom: 10px;
     }}
@@ -909,11 +910,11 @@ def write_html(
     </div>
     <div class="quick-sort-bar">
       <span class="quick-sort-label">Quick sort:</span>
-      <button class="quick-sort-btn" onclick="applyQuickSort('fri_call_oi', this)">
-        ⚡ Fri Call OI vs Yesterday
+      <button class="quick-sort-btn" id="btn-fri-call-oi" onclick="applyQuickSort('fri_call_oi', this)">
+        ⚡ Fri Call OI vs <span class="oi-label-day"></span>
       </button>
-      <button class="quick-sort-btn" onclick="applyQuickSort('fri_put_oi', this)">
-        ⚡ Fri Put OI vs Yesterday
+      <button class="quick-sort-btn" id="btn-fri-put-oi" onclick="applyQuickSort('fri_put_oi', this)">
+        ⚡ Fri Put OI vs <span class="oi-label-day"></span>
       </button>
     </div>
     <div class="table-scroll-top" id="table-scroll-top">
@@ -937,6 +938,7 @@ def write_html(
 const RAW = {data_payload};
 const HORIZONS = ["fri","7d","30d","45d","60d","90d","180d","1y"];
 const HORIZON_LABELS = {{"fri":"This Friday","7d":"7 Days","30d":"1 Month","45d":"45 Days","60d":"60 Days","90d":"90 Days","180d":"6 Months","1y":"1 Year"}};
+const DAILY_OI_LABEL = "{daily_oi_label}";  // "yesterday", "Friday", etc.
 const TOP_N = {TOP_N};
 
 let state = {{
@@ -1398,7 +1400,7 @@ function buildDetailCellContent(ticker) {{
         <span>1D: ${{p1d.html}}</span>
         <span>5D: ${{p5d.html}}</span>
       </div>
-      ${{dailyGroupsHtml ? `<div class="trend-bar-row"><span class="trend-section-label">OI vs Yesterday</span> ${{dailyGroupsHtml}}</div>` : ""}}
+      ${{dailyGroupsHtml ? `<div class="trend-bar-row"><span class="trend-section-label">OI vs ${{DAILY_OI_LABEL.charAt(0).toUpperCase() + DAILY_OI_LABEL.slice(1)}}</span> ${{dailyGroupsHtml}}</div>` : ""}}
       ${{weeklyGroupsHtml ? `<div class="trend-bar-row"><span class="trend-section-label">OI vs 7 Days Ago</span> ${{weeklyGroupsHtml}}</div>` : ""}}
     </div>`;
 
@@ -2083,6 +2085,10 @@ function applyQuickSort(col, btn) {{
 }})();
 
 // ---- Init ----
+// Populate dynamic day label in quick-sort buttons
+document.querySelectorAll(".oi-label-day").forEach(el => {{
+  el.textContent = DAILY_OI_LABEL.charAt(0).toUpperCase() + DAILY_OI_LABEL.slice(1);
+}});
 initPillDates();
 render();
 </script>

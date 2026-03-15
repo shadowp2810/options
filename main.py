@@ -409,11 +409,29 @@ def main():
 
     prev_data, snap_generated, snap_age_days = _load_snapshot(snapshot_path)
     suppressed = snap_age_days is not None and snap_age_days > MAX_DELTA_AGE_DAYS
+    # Build a human-readable label like "Friday" or "yesterday" for OI comparisons
+    if snap_generated:
+        try:
+            snap_date = date.fromisoformat(snap_generated[:10])
+            today_date = now.date()
+            delta = (today_date - snap_date).days
+            if delta == 1:
+                daily_oi_label = "yesterday"
+            elif delta == 0:
+                daily_oi_label = "earlier today"
+            else:
+                daily_oi_label = snap_date.strftime("%A")   # e.g. "Friday"
+        except Exception:
+            daily_oi_label = "yesterday"
+    else:
+        daily_oi_label = "yesterday"
+
     snapshot_info = {
-        "age_days": snap_age_days,
-        "generated": snap_generated,
-        "suppressed": suppressed,
-        "max_age": MAX_DELTA_AGE_DAYS,
+        "age_days":        snap_age_days,
+        "generated":       snap_generated,
+        "suppressed":      suppressed,
+        "max_age":         MAX_DELTA_AGE_DAYS,
+        "daily_oi_label":  daily_oi_label,   # "yesterday" / "Friday" / etc.
     }
     if prev_data is not None:
         age_str = f"{snap_age_days}d old" if snap_age_days is not None else "unknown age"
@@ -547,22 +565,32 @@ def main():
     write_html(analyzed, html_path, display_timestamp, snapshot_info=snapshot_info)
     print(f"\nDone! Open the HTML file in your browser to explore interactively.")
 
-    # Save daily snapshot (always overwrite)
+    # Save daily snapshot only on trading days (Mon–Fri).
+    # On weekends the OI data doesn't change, so we keep Friday's snapshot
+    # intact so that Monday's run still compares against Friday — not Sunday.
+    is_trading_day = now.weekday() < 5  # 0=Mon … 4=Fri
     try:
-        with open(snapshot_path, "w") as f:
-            json.dump({"generated": now.isoformat(), "tickers": analyzed}, f, default=str)
-        print(f"Snapshot saved: {snapshot_path}")
+        if is_trading_day:
+            with open(snapshot_path, "w") as f:
+                json.dump({"generated": now.isoformat(), "tickers": analyzed}, f, default=str)
+            print(f"Snapshot saved: {snapshot_path}")
+        else:
+            day_name = now.strftime("%A")
+            print(f"Snapshot NOT updated ({day_name} is a non-trading day — keeping last trading-day snapshot)")
     except Exception as e:
         print(f"[WARN] Could not save snapshot: {e}")
 
-    # Save weekly snapshot only when it doesn't exist or is ≥7 days old
+    # Save weekly snapshot only when it doesn't exist or is ≥7 days old,
+    # and only on trading days for the same reason.
     try:
         _, _, w_age = _load_snapshot(weekly_snapshot_path)
-        should_refresh_weekly = (w_age is None or w_age >= 7)
+        should_refresh_weekly = is_trading_day and (w_age is None or w_age >= 7)
         if should_refresh_weekly:
             with open(weekly_snapshot_path, "w") as f:
                 json.dump({"generated": now.isoformat(), "tickers": analyzed}, f, default=str)
             print(f"Weekly snapshot saved: {weekly_snapshot_path}")
+        elif not is_trading_day:
+            print(f"Weekly snapshot NOT updated (non-trading day)")
         else:
             print(f"Weekly snapshot kept:  {weekly_snapshot_path} ({w_age}d old, refreshes at 7d)")
     except Exception as e:
