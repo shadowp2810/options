@@ -217,19 +217,21 @@ def write_html(
   @media (max-width: 600px) {{
     .intraweek-section {{
       max-width: calc(100vw - 32px);
-      overflow: hidden;
+      /* overflow:clip clips visually without creating a scroll context,
+         so it won't block child momentum scroll on iOS */
+      overflow: clip;
     }}
     .intraweek-blocks {{
       flex-wrap: nowrap;
-      overflow-x: auto;
+      overflow-x: scroll;
       -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x proximity;
+      overscroll-behavior-x: contain;
+      touch-action: pan-x;
       padding-bottom: 8px;
     }}
     .intraweek-block {{
       flex: 0 0 82vw;
       min-width: 0;
-      scroll-snap-align: start;
     }}
   }}
   .intraweek-block-header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
@@ -326,7 +328,11 @@ def write_html(
   .legend-item .badge {{ flex-shrink: 0; margin-top: 1px; }}
   .legend-item .combo-badge {{ flex-shrink: 0; margin-top: 1px; }}
   .legend-desc strong {{ color: var(--text); }}
-  .table-wrap {{ overflow-x: auto; -webkit-overflow-scrolling: touch; }}
+  .table-wrap {{
+    overflow-x: scroll;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }}
   .table-scroll-top {{
     overflow-x: auto;
     overflow-y: hidden;
@@ -444,11 +450,6 @@ def write_html(
     gap: 16px;
     max-width: min(1120px, calc(100vw - 32px));
   }}
-  @media (max-width: 600px) {{
-    .detail-inner {{
-      max-width: min(1120px, calc(200vw - 32px));
-    }}
-  }}
   .horizon-block {{
     background: var(--surface);
     border: 1px solid var(--border);
@@ -464,15 +465,16 @@ def write_html(
       display: flex;
       flex-direction: row;
       flex-wrap: nowrap;
-      overflow-x: auto;
+      overflow-x: scroll;
       -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x proximity;
+      overscroll-behavior-x: contain;
+      touch-action: pan-x;
       gap: 10px;
       padding-bottom: 10px;
+      max-width: min(1120px, calc(200vw - 32px));
     }}
     .horizon-block {{
       flex: 0 0 82vw;
-      scroll-snap-align: start;
     }}
   }}
   .horizon-block-header {{
@@ -637,8 +639,10 @@ def write_html(
     gap: 8px;
     padding: 6px 20px;
     border-bottom: 1px solid var(--border);
-    overflow-x: auto;
+    overflow-x: scroll;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
     scrollbar-width: none;
   }}
   .quick-sort-bar::-webkit-scrollbar {{ display: none; }}
