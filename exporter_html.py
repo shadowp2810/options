@@ -25,6 +25,7 @@ def write_html(
     analyzed: list[dict],
     output_path: Path,
     timestamp: str,
+    iso_timestamp: str = "",
     snapshot_info: dict | None = None,
 ) -> None:
     if snapshot_info is None:
@@ -2282,6 +2283,7 @@ document.querySelectorAll(".oi-label-day").forEach(el => {{
 }});
 initPillDates();
 render();
+
 </script>
 </body>
 </html>

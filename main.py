@@ -14,7 +14,8 @@ Usage:
 import argparse
 import json
 import sys
-from datetime import datetime, date
+from datetime import datetime, date, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 from pathlib import Path
 
@@ -365,9 +366,11 @@ def main():
     args = parse_args()
 
     tickers = args.tickers if args.tickers else get_universe()
-    now = datetime.now()
-    timestamp = now.strftime("%Y%m%d_%H%M")
-    display_timestamp = now.strftime("%B %-d, %Y at %-I:%M %p")
+    now = datetime.now(timezone.utc)
+    now_et = now.astimezone(ZoneInfo("America/New_York"))
+    timestamp = now_et.strftime("%Y%m%d_%H%M")
+    iso_timestamp = ""   # no longer needed
+    display_timestamp = now_et.strftime("%B %-d, %Y at %-I:%M %p ET")
 
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
@@ -562,7 +565,7 @@ def main():
     print(f"Excel report: {output_path.resolve()}")
 
     html_path = output_path.with_suffix(".html")
-    write_html(analyzed, html_path, display_timestamp, snapshot_info=snapshot_info)
+    write_html(analyzed, html_path, display_timestamp, snapshot_info=snapshot_info, iso_timestamp=iso_timestamp)
     print(f"\nDone! Open the HTML file in your browser to explore interactively.")
 
     # Save daily snapshot only on trading days (Mon–Fri).
