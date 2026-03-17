@@ -27,6 +27,22 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Restore yesterday's snapshots if today's report already committed
+        run: |
+          # If the HEAD commit is today's automated report, restore the snapshot files
+          # from the previous commit so the Python script always diffs against yesterday.
+          TODAY=$(date -u +%Y-%m-%d)
+          LAST_DATE=$(git log -1 --format="%ad" --date=short HEAD)
+          LAST_MSG=$(git log -1 --format="%s" HEAD)
+          if [ "$LAST_DATE" = "$TODAY" ] && echo "$LAST_MSG" | grep -q "update options report"; then
+            echo "Today's report commit detected — restoring snapshots from HEAD~1"
+            git show HEAD~1:reports/latest_analysis.json > reports/latest_analysis.json 2>/dev/null && echo "  restored latest_analysis.json" || echo "  latest_analysis.json not in HEAD~1, skipping"
+            git show HEAD~1:reports/weekly_analysis.json > reports/weekly_analysis.json 2>/dev/null && echo "  restored weekly_analysis.json" || echo "  weekly_analysis.json not in HEAD~1, skipping"
+            git show HEAD~1:reports/strike_history.json  > reports/strike_history.json  2>/dev/null && echo "  restored strike_history.json"  || echo "  strike_history.json not in HEAD~1, skipping"
+          else
+            echo "No same-day report commit found — running fresh against existing snapshots"
+          fi
+
       - name: Generate options report
         run: python main.py
 
