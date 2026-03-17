@@ -446,9 +446,9 @@ def write_html(
   .detail-inner {{
     padding: 14px 20px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 260px));
+    grid-template-columns: repeat(4, minmax(0, 340px));
     gap: 16px;
-    max-width: min(1120px, calc(100vw - 32px));
+    max-width: min(1440px, calc(100vw - 32px));
   }}
   .horizon-block {{
     background: var(--surface);
@@ -456,6 +456,25 @@ def write_html(
     border-radius: 8px;
     overflow: hidden;
     min-width: 0;
+  }}
+  /* Two-column layout inside each horizon block */
+  .horizon-block-body {{
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+  }}
+  .horizon-block-left {{
+    flex: 0 0 55%;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+  }}
+  /* Right column height is driven by the left column.
+     The chart wrap is absolutely inset so Chart.js gets a fixed parent. */
+  .horizon-block-right {{
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    min-height: 220px;
   }}
   @media (max-width: 1000px) {{
     .detail-inner {{ grid-template-columns: repeat(2, 1fr); }}
@@ -471,7 +490,7 @@ def write_html(
       touch-action: pan-x;
       gap: 10px;
       padding-bottom: 10px;
-      max-width: min(1120px, calc(200vw - 32px));
+      max-width: min(1440px, calc(200vw - 32px));
     }}
     .horizon-block {{
       flex: 0 0 82vw;
@@ -540,11 +559,19 @@ def write_html(
 
   /* ---- OI Momentum line chart ---- */
   .momentum-chart-wrap {{
-    padding: 6px 10px 14px;
-    height: 170px;
-    position: relative;
-    border-top: 1px solid var(--border);
+    position: absolute;
+    inset: 0;
+    padding: 6px 8px 10px;
     background: rgba(0,0,0,0.08);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }}
+  .momentum-chart-wrap canvas {{
+    flex: 1;
+    min-height: 0;
+    /* Chart.js needs a positioned parent with explicit dimensions;
+       absolute inset on the wrap gives exactly that */
   }}
   .momentum-chart-label {{
     font-size: 9px;
@@ -577,7 +604,85 @@ def write_html(
   }}
   .momentum-expand-btn:hover {{
     background: rgba(167,139,250,0.18);
-    border-color: #7c5cbf;
+  }}
+  /* ---- Custom floating stacked-bar tooltip for OI Momentum ---- */
+  .mom-tooltip {{
+    position: fixed;
+    background: rgba(11,13,24,0.97);
+    border: 1px solid #2e3250;
+    border-radius: 8px;
+    padding: 9px 11px 10px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.08s;
+    z-index: 9999;
+    min-width: 190px;
+  }}
+  .mom-tt-date {{
+    font-size: 9px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 7px;
+  }}
+  .mom-tt-row {{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }}
+  .mom-tt-strike {{
+    color: #e2e8f0;
+    font-weight: 700;
+    font-size: 10px;
+    width: 44px;
+    flex-shrink: 0;
+  }}
+  .mom-tt-bars {{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }}
+  .mom-tt-bar-row {{
+    display: flex;
+    height: 7px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #1a1d27;
+  }}
+  .mom-tt-call {{ background: #22c55e; height: 100%; }}
+  .mom-tt-put  {{ background: #ef4444; height: 100%; }}
+  .mom-tt-right {{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    min-width: 56px;
+  }}
+  .mom-tt-total {{
+    color: #94a3b8;
+    font-size: 9px;
+    text-align: right;
+  }}
+  .mom-tt-delta {{
+    display: flex;
+    gap: 3px;
+    font-size: 8px;
+    margin-top: 1px;
+  }}
+  .mom-tt-legend {{
+    display: flex;
+    gap: 8px;
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid #1e2235;
+    font-size: 9px;
+    color: #64748b;
+  }}
+  .mom-tt-legend span {{ display: flex; align-items: center; gap: 3px; }}
+  .mom-tt-legend i {{
+    display: inline-block; width: 8px; height: 8px; border-radius: 2px;
   }}
 
   /* ---- Momentum fullscreen modal ---- */
@@ -596,12 +701,12 @@ def write_html(
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 20px 24px 24px;
-    width: min(94vw, 1100px);
-    max-height: 90vh;
+    padding: 16px 20px 20px;
+    width: min(96vw, 1200px);
+    height: 92vh;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   }}
   #mom-modal-header {{
@@ -612,6 +717,7 @@ def write_html(
     color: #a78bfa;
     text-transform: uppercase;
     letter-spacing: 0.6px;
+    flex-shrink: 0;
   }}
   #mom-modal-title {{ font-weight: 600; }}
   #mom-modal-close {{
@@ -628,7 +734,6 @@ def write_html(
   #mom-modal-canvas-wrap {{
     flex: 1;
     min-height: 0;
-    height: min(60vh, 520px);
     position: relative;
   }}
 
@@ -1245,14 +1350,22 @@ function buildDetailCellContent(ticker) {{
         <canvas id="${{momentumId}}" style="height:135px"></canvas>
       </div>` : "";
 
+    const rightCol = momentumHtml
+      ? `<div class="horizon-block-right">${{momentumHtml}}</div>`
+      : "";
+    const bodyContent = rightCol
+      ? `<div class="horizon-block-body">
+          <div class="horizon-block-left">${{rankRows}}${{chartHtml}}</div>
+          ${{rightCol}}
+        </div>`
+      : `${{rankRows}}${{chartHtml}}`;
+
     return `<div class="horizon-block">
       <div class="horizon-block-header">
         <span>${{HORIZON_LABELS[h]}} ${{earningsBadge(earningsInWin, ticker.earnings_date)}}</span>
         <span class="expiry">${{expiry ?? "N/A"}}</span>
       </div>
-      ${{rankRows}}
-      ${{chartHtml}}
-      ${{momentumHtml}}
+      ${{bodyContent}}
     </div>`;
   }}).join("");
 
@@ -1421,7 +1534,7 @@ const oiCharts = {{}}; // ticker -> [Chart, ...]
 function buildOIChartConfig(strikes, byStrike, currentPrice) {{
   // Compute a sensible bar width: ~60% of the median inter-strike gap in pixels
   // We rely on Chart.js barThickness (px); pick something readable.
-  const BAR_THICKNESS = Math.max(3, Math.min(10, Math.floor(180 / (strikes.length + 1))));
+  const BAR_THICKNESS = 3;
 
   // Vertical "current price" line via Chart.js beforeDraw plugin
   const priceLinePlugin = {{
@@ -1674,9 +1787,27 @@ function buildMomentumChartConfig(historyArr) {{
     return `${{dayNames[dt.getDay()]}} ${{dt.getMonth()+1}}/${{dt.getDate()}}`;
   }});
 
+  const crosshairPlugin = {{
+    id: "momCrosshair",
+    afterDraw(chart) {{
+      const {{ ctx, tooltip, chartArea: {{ top, bottom }} }} = chart;
+      if (!tooltip || !tooltip._active || !tooltip._active.length) return;
+      const x = tooltip._active[0].element.x;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, bottom);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(148,163,184,0.3)";
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.restore();
+    }},
+  }};
+
   return {{
     type: "line",
-    plugins: [momentumFirstLabelPlugin],
+    plugins: [momentumFirstLabelPlugin, crosshairPlugin],
     data: {{ labels: shortDates, datasets }},
     options: {{
       animation: false,
@@ -1684,7 +1815,97 @@ function buildMomentumChartConfig(historyArr) {{
       maintainAspectRatio: false,
       plugins: {{
         legend: {{ display: false }},
-        tooltip: {{ enabled: false }},
+        tooltip: {{
+          enabled: false,
+          mode: "index",
+          intersect: false,
+          filter: item => item.parsed.y != null && !isNaN(item.parsed.y) && item.parsed.y > 0,
+          external(context) {{
+            const {{ chart, tooltip }} = context;
+            const wrap = chart.canvas.parentNode;
+            let el = wrap.querySelector(".mom-tooltip");
+            if (!el) {{
+              el = document.createElement("div");
+              el.className = "mom-tooltip";
+              wrap.appendChild(el);
+            }}
+            if (tooltip.opacity === 0 || !tooltip.dataPoints?.length) {{
+              el.style.opacity = "0";
+              return;
+            }}
+            // Index into normHist for current and previous day
+            const dataIdx = tooltip.dataPoints[0].dataIndex;
+            const prevSnap = dataIdx > 0 ? (normHist[dataIdx - 1]?.strikes ?? {{}}) : null;
+
+            // Group datapoints by strike, separate call vs put
+            const byStrike = {{}};
+            tooltip.dataPoints.forEach(item => {{
+              const m = (item.dataset.label || "").match(/\$?([\d.]+)\s+(C|P)$/);
+              if (!m) return;
+              const [, strike, type] = m;
+              if (!byStrike[strike]) byStrike[strike] = {{ call: 0, put: 0 }};
+              const v = item.parsed.y;
+              if (v > 0) (type === "C" ? byStrike[strike].call = v : byStrike[strike].put = v);
+            }});
+            const sorted = Object.entries(byStrike)
+              .map(([s, d]) => ({{ strike: s, call: d.call, put: d.put, total: d.call + d.put }}))
+              .filter(x => x.total > 0)
+              .sort((a, b) => b.total - a.total);
+            if (!sorted.length) {{ el.style.opacity = "0"; return; }}
+
+            const maxTotal = sorted[0].total;
+            const fmtAbs = v => (Math.abs(v)/1000).toFixed(1)+"k";
+            const fmtDelta = v => (v >= 0 ? "+" : "-") + fmtAbs(v);
+            const date = tooltip.title?.[0] ?? "";
+
+            let html = `<div class="mom-tt-date">${{date}}</div>`;
+            sorted.forEach(({{ strike, call, put, total }}) => {{
+              const cw = maxTotal > 0 ? Math.round(call / maxTotal * 100) : 0;
+              const pw = maxTotal > 0 ? Math.round(put  / maxTotal * 100) : 0;
+
+              // Delta vs previous day
+              let deltaHtml = "";
+              if (prevSnap) {{
+                const prev = prevSnap[strike] ?? {{ call: 0, put: 0 }};
+                const dC = call - (prev.call ?? 0);
+                const dP = put  - (prev.put  ?? 0);
+                if (dC !== 0 || dP !== 0) {{
+                  const cStr = dC !== 0 ? `<span style="color:${{dC>0?"#4ade80":"#f87171"}}">${{fmtDelta(dC)}}C</span>` : "";
+                  const pStr = dP !== 0 ? `<span style="color:${{dP>0?"#4ade80":"#f87171"}}">${{fmtDelta(dP)}}P</span>` : "";
+                  deltaHtml = `<div class="mom-tt-delta">${{cStr}}${{pStr}}</div>`;
+                }}
+              }}
+
+              html += `<div class="mom-tt-row">
+                <div class="mom-tt-strike">$${{strike}}</div>
+                <div class="mom-tt-bars">
+                  <div class="mom-tt-bar-row">
+                    <div class="mom-tt-call" style="width:${{cw}}%"></div>
+                    <div class="mom-tt-put"  style="width:${{pw}}%"></div>
+                  </div>
+                </div>
+                <div class="mom-tt-right">
+                  <div class="mom-tt-total">${{fmtAbs(total)}}</div>
+                  ${{deltaHtml}}
+                </div>
+              </div>`;
+            }});
+            html += `<div class="mom-tt-legend">
+              <span><i style="background:#22c55e"></i>Calls</span>
+              <span><i style="background:#ef4444"></i>Puts</span>
+            </div>`;
+            el.innerHTML = html;
+            el.style.opacity = "1";
+            // Fixed positioning so overflow:hidden parents don't clip
+            const rect = chart.canvas.getBoundingClientRect();
+            const ttW = 210;
+            let left = rect.left + tooltip.caretX + 14;
+            if (left + ttW > window.innerWidth - 8) left = rect.left + tooltip.caretX - ttW - 14;
+            const top = Math.max(rect.top + 4, rect.top + tooltip.caretY - 40);
+            el.style.left = Math.max(4, left) + "px";
+            el.style.top  = top + "px";
+          }},
+        }},
       }},
       scales: {{
         x: {{
@@ -1758,6 +1979,7 @@ function initOICharts(tickerStr, tickerData) {{
     if (histArr.length === 0) return;
     const cfg = buildMomentumChartConfig(histArr);
     if (!cfg) return;
+    canvas._momHistData = histArr;   // store for modal rebuild
     const chart = new Chart(canvas.getContext("2d"), cfg);
     oiCharts[tickerStr].push(chart);
   }});
@@ -1963,49 +2185,31 @@ function initPillDates() {{
 let _momModalChart = null;
 
 function openMomModal(sourceCanvasId, title) {{
-  // Find the source canvas and get its Chart.js instance
   const sourceCanvas = document.getElementById(sourceCanvasId);
   if (!sourceCanvas) return;
 
-  // Retrieve the config from the source chart
-  let sourceChart = null;
-  for (const charts of Object.values(oiCharts)) {{
-    for (const c of charts) {{
-      if (c.canvas === sourceCanvas) {{ sourceChart = c; break; }}
-    }}
-    if (sourceChart) break;
-  }}
-  if (!sourceChart) return;
+  // Use the history data stored on the canvas to rebuild the config fresh.
+  // JSON.parse/stringify would strip all functions (external tooltip, plugins etc.)
+  const histArr = sourceCanvas._momHistData;
+  if (!histArr || !histArr.length) return;
 
-  // Update modal title
   document.getElementById("mom-modal-title").textContent = title || "OI Momentum";
 
-  // Destroy any previous modal chart
   if (_momModalChart) {{ try {{ _momModalChart.destroy(); }} catch(e) {{}} _momModalChart = null; }}
 
-  // Re-create chart on the modal canvas using the same data/options
-  const modalCanvas = document.getElementById("mom-modal-canvas");
-  const src = sourceChart.config;
+  const modalCfg = buildMomentumChartConfig(histArr);
+  if (!modalCfg) return;
 
-  // Deep-clone config so we can tweak font sizes for the larger canvas
-  const modalCfg = JSON.parse(JSON.stringify({{
-    type: src.type,
-    data: src.data,
-    options: src.options,
-  }}));
-
-  // Increase legend/tick font sizes for full-screen view
+  // Larger font sizes for the full-screen view
   try {{
     modalCfg.options.scales.x.ticks.font.size = 11;
     modalCfg.options.scales.x.ticks.maxRotation = 0;
     modalCfg.options.scales.y.ticks.font.size = 11;
   }} catch(e) {{}}
-  modalCfg.options.animation = false;
 
-  modalCfg.plugins = [momentumFirstLabelPlugin];
+  const modalCanvas = document.getElementById("mom-modal-canvas");
   _momModalChart = new Chart(modalCanvas.getContext("2d"), modalCfg);
 
-  // Show modal
   const modal = document.getElementById("mom-modal");
   modal.classList.add("open");
   document.body.style.overflow = "hidden";
