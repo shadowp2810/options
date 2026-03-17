@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need HEAD~1 for same-day snapshot restore
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -36,9 +38,22 @@ jobs:
           LAST_MSG=$(git log -1 --format="%s" HEAD)
           if [ "$LAST_DATE" = "$TODAY" ] && echo "$LAST_MSG" | grep -q "update options report"; then
             echo "Today's report commit detected — restoring snapshots from HEAD~1"
-            git show HEAD~1:reports/latest_analysis.json > reports/latest_analysis.json 2>/dev/null && echo "  restored latest_analysis.json" || echo "  latest_analysis.json not in HEAD~1, skipping"
-            git show HEAD~1:reports/weekly_analysis.json > reports/weekly_analysis.json 2>/dev/null && echo "  restored weekly_analysis.json" || echo "  weekly_analysis.json not in HEAD~1, skipping"
-            git show HEAD~1:reports/strike_history.json  > reports/strike_history.json  2>/dev/null && echo "  restored strike_history.json"  || echo "  strike_history.json not in HEAD~1, skipping"
+            # Write to a temp file first so a failed git-show never truncates the original
+            restore_file() {
+              local src="$1" dst="$2"
+              local tmp
+              tmp=$(mktemp)
+              if git show "HEAD~1:$src" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+                mv "$tmp" "$dst"
+                echo "  restored $src"
+              else
+                rm -f "$tmp"
+                echo "  $src not found in HEAD~1, keeping existing"
+              fi
+            }
+            restore_file reports/latest_analysis.json  reports/latest_analysis.json
+            restore_file reports/weekly_analysis.json  reports/weekly_analysis.json
+            restore_file reports/strike_history.json   reports/strike_history.json
           else
             echo "No same-day report commit found — running fresh against existing snapshots"
           fi
