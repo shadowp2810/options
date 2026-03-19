@@ -78,38 +78,54 @@ def get_options_chain_nasdaq(
     to_str = end_date.strftime("%Y-%m-%d")
 
     url = f"https://api.nasdaq.com/api/quote/{ticker}/option-chain"
-    params = {
+
+    # Fetch all rows in one shot with a generous limit.
+    # NVDA and other high-liquidity names can have 1000+ strike rows across
+    # all expiries, so we use a large limit and then paginate if the API signals
+    # there are more rows (totalrecords > len(rows)).
+    BASE_LIMIT = 5000
+
+    def _fetch(params: dict) -> list:
+        for attempt in range(3):
+            try:
+                session = _get_session()
+                resp = session.get(url, params=params, timeout=15)
+                resp.raise_for_status()
+                d = resp.json()
+                inner = (d.get("data") or {}) if isinstance(d, dict) else {}
+                table = (inner.get("table") or {}) if isinstance(inner, dict) else {}
+                return table.get("rows") or [] if isinstance(table, dict) else []
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+                else:
+                    print(f"  [NASDAQ WARN] {ticker}: request failed after 3 attempts — {e}")
+                    return []
+        return []
+
+    base_params = {
         "assetclass": "stocks",
-        "limit": 500,          # rows = unique strikes per expiry
+        "limit": BASE_LIMIT,
         "fromdate": from_str,
         "todate": to_str,
         "expiryType": "all",
+        "offset": 0,
     }
 
-    data = None
-    for attempt in range(3):
-        try:
-            session = _get_session()
-            resp = session.get(url, params=params, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
-            break
-        except Exception as e:
-            if attempt < 2:
-                time.sleep(1.5 * (attempt + 1))
-            else:
-                print(f"  [NASDAQ WARN] {ticker}: request failed after 3 attempts — {e}")
-                return [], {}
-
-    if not data or not isinstance(data, dict):
-        return [], {}
-    inner = data.get("data") or {}
-    if not isinstance(inner, dict):
-        return [], {}
-    table = inner.get("table") or {}
-    rows = table.get("rows") if isinstance(table, dict) else None
+    rows = _fetch(base_params)
     if not rows:
         return [], {}
+
+    # If the response was exactly BASE_LIMIT rows it may be truncated — page forward
+    offset = BASE_LIMIT
+    while len(rows) % BASE_LIMIT == 0:
+        more = _fetch({**base_params, "offset": offset})
+        if not more:
+            break
+        rows.extend(more)
+        if len(more) < BASE_LIMIT:
+            break
+        offset += BASE_LIMIT
 
     # Parse rows into individual contracts
     # Row format: one row per strike with both call (c_*) and put (p_*) fields
