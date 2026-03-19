@@ -30,7 +30,7 @@ NASDAQ_100 = [
     "VRSK", "CRWD", "TEAM", "ZS", "ADSK", "MCHP", "CSX", "EA", "CEG", "BIIB",
     "WBD", "IDXX", "FANG", "EXC", "XEL", "GEHC", "KHC", "TTWO", "ON", "GFS",
     "DLTR", "ILMN", "SIRI", "ZM", "LCID", "DDOG", "OKTA", "RIVN", "RGEN", "NTES",
-    "ALGN", "CDW", "HOLX", "MTCH", "SWKS", "INCY", "PDD",
+    "ALGN", "CDW", "HOLX", "MTCH", "SWKS", "INCY", "PDD", "NET",
 ]
 
 # ---------------------------------------------------------------------------
