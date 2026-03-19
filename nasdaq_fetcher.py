@@ -109,6 +109,7 @@ def get_options_chain_nasdaq(
         "fromdate": from_str,
         "todate": to_str,
         "expiryType": "all",
+        "money": "all",   # include ALL strikes, not just near-the-money
         "offset": 0,
     }
 
