@@ -1717,13 +1717,33 @@ function buildMomentumChartConfig(historyArr) {{
 
   const dates = normHist.map(e => e.date);
 
-  // Gather all strikes across all days, pick top 8 by latest-day OI (call+put)
+  // Gather all strikes that appear in ANY day, rank by peak OI across all history.
+  // This ensures a strike that was huge earlier (then unwound) still appears on the
+  // chart — its disappearance is itself a meaningful signal.
+  const peakOI = {{}};  // strike → {{ peak, latestOI }}
+  normHist.forEach(e => {{
+    Object.entries(e.strikes ?? {{}}).forEach(([k, d]) => {{
+      const total = (d.call ?? 0) + (d.put ?? 0);
+      if (!peakOI[k]) peakOI[k] = {{ peak: 0, latestOI: 0 }};
+      if (total > peakOI[k].peak) peakOI[k].peak = total;
+    }});
+  }});
+  // Also record each strike's latest-day OI so today's big ones rank first on ties
   const latestStrikes = normHist[normHist.length - 1].strikes ?? {{}};
-  const ranked = Object.entries(latestStrikes)
-    .map(([s, d]) => ({{ strike: parseFloat(s), oi: (d.call ?? 0) + (d.put ?? 0), call: d.call ?? 0, put: d.put ?? 0 }}))
-    .filter(x => x.oi > 0)
-    .sort((a, b) => b.oi - a.oi)
-    .slice(0, 8);
+  Object.entries(latestStrikes).forEach(([k, d]) => {{
+    if (peakOI[k]) peakOI[k].latestOI = (d.call ?? 0) + (d.put ?? 0);
+  }});
+  const ranked = Object.entries(peakOI)
+    .filter(([, v]) => v.peak > 0)
+    // Sort by peak OI (across all history days) so a strike that was huge earlier
+    // but unwound still ranks high and appears on the chart, even if today it is 0.
+    .sort(([, a], [, b]) => b.peak - a.peak)
+    .slice(0, 8)
+    .map(([s]) => {{
+      const latest = latestStrikes[s] ?? {{}};
+      return {{ strike: parseFloat(s), oi: (latest.call ?? 0) + (latest.put ?? 0),
+               call: latest.call ?? 0, put: latest.put ?? 0 }};
+    }});
 
   if (ranked.length === 0) return null;
 
