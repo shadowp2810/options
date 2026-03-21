@@ -525,13 +525,20 @@ def write_html(
   .horizon-block-header .expiry {{ font-size: 10px; color: var(--text-dim); font-weight: 400; }}
   .rank-row {{
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     padding: 6px 12px;
     border-bottom: 1px solid var(--border);
     font-size: 11px;
   }}
   .rank-row:last-child {{ border-bottom: none; }}
+  .rank-num-col {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+  }}
   .rank-num {{
     width: 18px;
     height: 18px;
@@ -541,7 +548,6 @@ def write_html(
     justify-content: center;
     font-size: 9px;
     font-weight: 700;
-    flex-shrink: 0;
   }}
   .rank-num.r1 {{ background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }}
   .rank-num.r2 {{ background: #64748b22; color: #94a3b8; border: 1px solid #64748b44; }}
@@ -1351,10 +1357,12 @@ function buildDetailCellContent(ticker) {{
       const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
       return `
         <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
-          <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+          <div class="rank-num-col">
+            <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+            ${{badgeCompact(c.signal)}}
+          </div>
           <div class="rank-detail">
             <span class="rank-strike">$${{c.strike ?? "—"}}</span>
-            ${{badgeCompact(c.signal)}}
             ${{fmtDetail(c.forecast_pct)}}
             ${{flipBadge(c)}}
             <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
@@ -1386,10 +1394,12 @@ function buildDetailCellContent(ticker) {{
       const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
       return `
         <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
-          <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+          <div class="rank-num-col">
+            <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+            ${{badgeCompact(c.signal)}}
+          </div>
           <div class="rank-detail">
             <span class="rank-strike">$${{c.strike ?? "—"}}</span>
-            ${{badgeCompact(c.signal)}}
             ${{fmtDetail(c.forecast_pct)}}
             <span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>
             <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
@@ -1453,10 +1463,12 @@ function buildDetailCellContent(ticker) {{
         const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
         return `
           <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
-            <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+            <div class="rank-num-col">
+              <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+              ${{badgeCompact(c.signal)}}
+            </div>
             <div class="rank-detail">
               <span class="rank-strike">$${{c.strike ?? "—"}}</span>
-              ${{badgeCompact(c.signal)}}
               ${{fmtDetail(c.forecast_pct)}}
               <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
               ${{c.volume ? `<span class="rank-vol">Vol: ${{c.volume.toLocaleString("en-US")}}</span>` : ""}}
