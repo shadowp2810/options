@@ -366,11 +366,10 @@ def main():
     args = parse_args()
 
     tickers = args.tickers if args.tickers else get_universe()
-    now = datetime.now(timezone.utc)
-    now_et = now.astimezone(ZoneInfo("America/New_York"))
-    timestamp = now_et.strftime("%Y%m%d_%H%M")
+    now = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York"))
+    timestamp = now.strftime("%Y%m%d_%H%M")
     iso_timestamp = ""   # no longer needed
-    display_timestamp = now_et.strftime("%B %-d, %Y at %-I:%M %p ET")
+    display_timestamp = now.strftime("%B %-d, %Y at %-I:%M %p ET")
 
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)

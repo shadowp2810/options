@@ -415,7 +415,7 @@ def write_html(
   .badge.na {{ background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }}
 
   /* forecast % coloring */
-  .pct {{ font-weight: 600; }}
+  .pct {{ font-weight: 600; font-size: 10px; }}
   .pct.pos {{ color: var(--green); }}
   .pct.neg {{ color: var(--red); }}
   .pct.na {{ color: var(--text-dim); }}
@@ -560,7 +560,7 @@ def write_html(
   .vol-low   {{ color: #64748b; }}
   .vol-med   {{ color: var(--text-dim); }}
   .vol-high  {{ color: #4ade80; }}
-  .vol-vhigh {{ color: #22c55e; font-weight: 600; }}
+  .vol-vhigh {{ color: #22c55e; }}
   .rank-row-dimmed {{ opacity: 0.28; }}
   .period-cell-dimmed {{ opacity: 0.3; }}
 
@@ -1366,7 +1366,7 @@ function buildDetailCellContent(ticker) {{
             ${{fmtDetail(c.forecast_pct)}}
             ${{flipBadge(c)}}
             <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
-            ${{c.volume ? `<span class="rank-vol">Vol: ${{c.volume.toLocaleString("en-US")}}</span>` : ""}}
+            ${{c.volume ? `<span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>` : ""}}
           </div>
         </div>`;
     }}).join("");
@@ -1471,7 +1471,7 @@ function buildDetailCellContent(ticker) {{
               <span class="rank-strike">$${{c.strike ?? "—"}}</span>
               ${{fmtDetail(c.forecast_pct)}}
               <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
-              ${{c.volume ? `<span class="rank-vol">Vol: ${{c.volume.toLocaleString("en-US")}}</span>` : ""}}
+              ${{c.volume ? `<span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>` : ""}}
             </div>
           </div>`;
       }}).join("");
@@ -1604,18 +1604,13 @@ function buildDetailCellContent(ticker) {{
 const expandedTickers = new Set(); // persists across renders
 const oiCharts = {{}}; // ticker -> [Chart, ...]
 
-// ── Shared helper: build a Chart.js config with a linear x-axis ─────────────
-// Uses numeric strike values on the x-axis so spacing reflects real distance
-// (e.g. 410→420 is twice as wide as 420→425). Also draws a vertical dashed
-// line at the current stock price so ITM/OTM boundary is immediately visible.
-function buildOIChartConfig(strikes, byStrike, currentPrice) {{
-  // Compute a sensible bar width: ~60% of the median inter-strike gap in pixels
-  // We rely on Chart.js barThickness (px); pick something readable.
-  const BAR_THICKNESS = 3;
-
-  // Vertical "current price" line via Chart.js beforeDraw plugin
+// ── Shared helper: build a Chart.js stacked-bar config ───────────────────────
+// Uses a LINEAR x-axis so strike spacing is proportional to real price distance
+// (e.g. 260→262.5 is visually narrower than 260→265).
+// Bar width is computed dynamically after layout so bars fill their slot.
+function _makeBarPlugins(pluginId, strikes, currentPrice) {{
   const priceLinePlugin = {{
-    id: "priceLine",
+    id: pluginId,
     beforeDraw(chart) {{
       const xScale = chart.scales.x;
       if (!xScale || currentPrice == null) return;
@@ -1625,7 +1620,7 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
       ctx.save();
       ctx.beginPath();
       ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = "rgba(250,204,21,0.7)";  // amber dashed line
+      ctx.strokeStyle = "rgba(250,204,21,0.7)";
       ctx.lineWidth = 1.5;
       ctx.moveTo(xPx, chart.chartArea.top);
       ctx.lineTo(xPx, chart.chartArea.bottom);
@@ -1633,28 +1628,45 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
       ctx.restore();
     }}
   }};
+  // Force the x-axis to span exactly the data range (no "nice" rounding padding).
+  // We do this in beforeUpdate so it is applied on every chart update cycle
+  // before the scale recomputes its limits.
+  const xBoundsPlugin = {{
+    id: pluginId + "_xb",
+    beforeUpdate(chart) {{
+      if (strikes.length < 2) return;
+      const so = chart.options.scales.x;
+      const gL = strikes[1] - strikes[0];
+      const gR = strikes[strikes.length-1] - strikes[strikes.length-2];
+      so.min = strikes[0] - gL * 0.6;
+      so.max = strikes[strikes.length-1] + gR * 0.6;
+    }}
+  }};
+  return [priceLinePlugin, xBoundsPlugin];
+}}
 
+function buildOIChartConfig(strikes, byStrike, currentPrice) {{
   return {{
     type: "bar",
-    plugins: [priceLinePlugin],
+    plugins: _makeBarPlugins("priceLineOI", strikes, currentPrice),
     data: {{
       datasets: [
         {{
           label: "Call OI",
           data: strikes.map(s => ({{ x: s, y: byStrike[s]?.call ?? 0 }})),
-          backgroundColor: "rgba(34,197,94,0.75)",
+          backgroundColor: "rgba(34,197,94,0.9)",
           borderColor: "rgba(34,197,94,1)",
-          borderWidth: 1, borderRadius: 2,
-          barThickness: BAR_THICKNESS,
+          borderWidth: 0, borderRadius: 0,
+          barThickness: 2,
           stack: "oi",
         }},
         {{
           label: "Put OI",
           data: strikes.map(s => ({{ x: s, y: byStrike[s]?.put ?? 0 }})),
-          backgroundColor: "rgba(239,68,68,0.75)",
+          backgroundColor: "rgba(239,68,68,0.9)",
           borderColor: "rgba(239,68,68,1)",
-          borderWidth: 1, borderRadius: 2,
-          barThickness: BAR_THICKNESS,
+          borderWidth: 0, borderRadius: 0,
+          barThickness: 2,
           stack: "oi",
         }},
       ]
@@ -1705,7 +1717,6 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
               html += `<div style="margin-top:4px;color:#facc15">Current price: $${{currentPrice}}</div>`;
             el.innerHTML = html;
 
-            // Use fixed positioning via getBoundingClientRect so overflow:hidden parents can't clip it
             const rect  = chart.canvas.getBoundingClientRect();
             const tp    = tooltip.caretX + rect.left;
             const ty    = tooltip.caretY + rect.top;
@@ -1734,15 +1745,8 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
         x: {{
           type: "linear",
           stacked: true,
-          offset: true,          // leave small margin on edges
-          ticks: {{
-            color: "#64748b",
-            font: {{ size: 9 }},
-            maxRotation: 40,
-            callback: v => `$${{v}}`,
-            // Show at most ~8 tick labels regardless of how many strikes there are
-            maxTicksLimit: 8,
-          }},
+          offset: false,
+          ticks: {{ display: false }},
           grid: {{ color: "#1e2235" }},
         }},
         y: {{
@@ -1761,48 +1765,27 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
 // Volume bar chart — same structure as OI chart but uses today's volume data.
 // byStrike[s] = {{ call: callVol, put: putVol, callOI, putOI, callSig, putSig }}
 function buildVolChartConfig(strikes, byStrike, currentPrice) {{
-  const BAR_THICKNESS = 3;
-  const priceLinePlugin = {{
-    id: "priceLineVol",
-    beforeDraw(chart) {{
-      const xScale = chart.scales.x;
-      if (!xScale || currentPrice == null) return;
-      const xPx = xScale.getPixelForValue(currentPrice);
-      if (xPx < xScale.left || xPx > xScale.right) return;
-      const ctx = chart.ctx;
-      ctx.save();
-      ctx.beginPath();
-      ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = "rgba(250,204,21,0.7)";
-      ctx.lineWidth = 1.5;
-      ctx.moveTo(xPx, chart.chartArea.top);
-      ctx.lineTo(xPx, chart.chartArea.bottom);
-      ctx.stroke();
-      ctx.restore();
-    }}
-  }};
-
   return {{
     type: "bar",
-    plugins: [priceLinePlugin],
+    plugins: _makeBarPlugins("priceLineVol", strikes, currentPrice),
     data: {{
       datasets: [
         {{
           label: "Call Vol",
           data: strikes.map(s => ({{ x: s, y: byStrike[s]?.call ?? 0 }})),
-          backgroundColor: "rgba(96,165,250,0.75)",
+          backgroundColor: "rgba(96,165,250,0.9)",
           borderColor: "rgba(96,165,250,1)",
-          borderWidth: 1, borderRadius: 2,
-          barThickness: BAR_THICKNESS,
+          borderWidth: 0, borderRadius: 0,
+          barThickness: 2,
           stack: "vol",
         }},
         {{
           label: "Put Vol",
           data: strikes.map(s => ({{ x: s, y: byStrike[s]?.put ?? 0 }})),
-          backgroundColor: "rgba(251,146,60,0.75)",
+          backgroundColor: "rgba(251,146,60,0.9)",
           borderColor: "rgba(251,146,60,1)",
-          borderWidth: 1, borderRadius: 2,
-          barThickness: BAR_THICKNESS,
+          borderWidth: 0, borderRadius: 0,
+          barThickness: 2,
           stack: "vol",
         }},
       ]
@@ -1876,14 +1859,8 @@ function buildVolChartConfig(strikes, byStrike, currentPrice) {{
         x: {{
           type: "linear",
           stacked: true,
-          offset: true,
-          ticks: {{
-            color: "#64748b",
-            font: {{ size: 9 }},
-            maxRotation: 40,
-            callback: v => `$${{v}}`,
-            maxTicksLimit: 8,
-          }},
+          offset: false,
+          ticks: {{ display: false }},
           grid: {{ color: "#1e2235" }},
         }},
         y: {{
@@ -1952,7 +1929,7 @@ const momentumFirstLabelPlugin = {{
 // Shows how Open Interest for each strike evolves day-by-day over the tracked
 // window (up to 7 days).  Calls are green shades, puts are red shades.
 // A fast-growing strike mid-week (a "rising star") will show a steep upward line.
-function buildMomentumChartConfig(historyArr) {{
+function buildMomentumChartConfig(historyArr, showXTicks = false) {{
   // historyArr: [{{date:"2026-03-10", strikes:{{"420.0":{{call:x,put:y}}, ...}}}}, ...]
   if (!historyArr || historyArr.length === 0) return null;
 
@@ -2181,7 +2158,9 @@ function buildMomentumChartConfig(historyArr) {{
       }},
       scales: {{
         x: {{
-          ticks: {{ color: "#64748b", font: {{ size: 9 }}, maxRotation: 30 }},
+          ticks: showXTicks
+            ? {{ color: "#64748b", font: {{ size: 9 }}, maxRotation: 30 }}
+            : {{ display: false }},
           grid: {{ color: "#1e2235" }},
         }},
         y: {{
@@ -2508,7 +2487,7 @@ function openMomModal(sourceCanvasId, title) {{
 
   if (_momModalChart) {{ try {{ _momModalChart.destroy(); }} catch(e) {{}} _momModalChart = null; }}
 
-  const modalCfg = buildMomentumChartConfig(histArr);
+  const modalCfg = buildMomentumChartConfig(histArr, true);
   if (!modalCfg) return;
 
   // Larger font sizes for the full-screen view
