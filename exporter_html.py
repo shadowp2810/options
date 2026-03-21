@@ -458,24 +458,38 @@ def write_html(
     overflow: hidden;
     min-width: 0;
   }}
-  /* Two-column layout inside each horizon block */
+  /* Three-column layout inside each horizon block: OI | Volume | Momentum */
   .horizon-block-body {{
     display: flex;
     flex-direction: row;
     align-items: stretch;
   }}
   .horizon-block-left {{
-    flex: 0 0 55%;
+    flex: 0 0 33%;
     min-width: 0;
     border-right: 1px solid var(--border);
   }}
-  /* Right column height is driven by the left column.
+  .horizon-block-middle {{
+    flex: 0 0 33%;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+  }}
+  /* Right column (momentum) height is driven by the left columns.
      The chart wrap is absolutely inset so Chart.js gets a fixed parent. */
   .horizon-block-right {{
     flex: 1;
     min-width: 0;
     position: relative;
     min-height: 220px;
+  }}
+  /* Small label above each rank list to distinguish OI vs Volume columns */
+  .col-section-label {{
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    padding: 4px 12px 3px;
+    border-bottom: 1px solid var(--border);
   }}
   @media (max-width: 1000px) {{
     .detail-inner {{ grid-template-columns: repeat(2, 1fr); }}
@@ -532,9 +546,10 @@ def write_html(
   .rank-num.r1 {{ background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }}
   .rank-num.r2 {{ background: #64748b22; color: #94a3b8; border: 1px solid #64748b44; }}
   .rank-num.r3 {{ background: #7c3aed22; color: #a78bfa; border: 1px solid #7c3aed44; }}
-  .rank-detail {{ flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }}
+  .rank-detail {{ flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }}
   .rank-strike {{ color: var(--text); font-weight: 600; }}
-  .rank-vol {{ font-size: 10px; }}
+  .rank-vol {{ font-size: 10px; color: var(--text-dim); }}
+  .rank-label {{ font-size: 9px; opacity: 0.6; color: var(--text-dim); }}
   .vol-vlow  {{ color: #334155; }}
   .vol-low   {{ color: #64748b; }}
   .vol-med   {{ color: var(--text-dim); }}
@@ -1070,6 +1085,13 @@ function fmt(v) {{
   const sign = v > 0 ? "+" : "";
   return `<span class="pct ${{cls}}">${{sign}}${{v.toFixed(2)}}% <span style="font-weight:400;font-size:9px;opacity:0.7">to strike</span></span>`;
 }}
+// Variant for rank rows: % and "to strike" are separate flex children so each gets its own line
+function fmtDetail(v) {{
+  if (v == null) return '<span class="pct na">N/A</span>';
+  const cls = v > 0 ? "pos" : v < 0 ? "neg" : "";
+  const sign = v > 0 ? "+" : "";
+  return `<span class="pct ${{cls}}">${{sign}}${{v.toFixed(2)}}%</span><span class="rank-label">to strike</span>`;
+}}
 function fmtPrice(v) {{
   if (v == null) return '<span class="pct na">N/A</span>';
   return `${{v.toLocaleString("en-US", {{minimumFractionDigits:2, maximumFractionDigits:2}})}}`;
@@ -1089,6 +1111,15 @@ function badge(signal) {{
   const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell"
     : signal === "HEDGE-C" ? "hedge-c" : signal === "HEDGE-P" ? "hedge-p" : "na";
   return `<span class="badge ${{cls}}">${{signal}}</span>`;
+}}
+// Compact badge for rank rows inside expanded view:
+// BUY/SELL are omitted (% to strike already conveys direction);
+// HEDGE-C/HEDGE-P are shown smaller so they don't dominate the row.
+function badgeCompact(signal) {{
+  if (!signal || signal === "BUY" || signal === "SELL") return "";
+  const cls   = signal === "HEDGE-C" ? "hedge-c" : signal === "HEDGE-P" ? "hedge-p" : "na";
+  const label = signal === "HEDGE-C" ? "HC" : signal === "HEDGE-P" ? "HP" : signal;
+  return `<span class="badge ${{cls}}" style="font-size:8px;padding:1px 4px">${{label}}</span>`;
 }}
 
 function earningsBadge(inWindow, earningsDate) {{
@@ -1317,28 +1348,58 @@ function buildDetailCellContent(ticker) {{
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
           <div class="rank-detail"><span class="pct na">N/A</span></div>
         </div>`;
-      const moneynessLabel = c.moneyness ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>` : "";
       const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
       return `
         <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
           <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
           <div class="rank-detail">
             <span class="rank-strike">$${{c.strike ?? "—"}}</span>
-            ${{moneynessLabel}}
-            ${{badge(c.signal)}}
-            ${{fmt(c.forecast_pct)}}
+            ${{badgeCompact(c.signal)}}
+            ${{fmtDetail(c.forecast_pct)}}
             ${{flipBadge(c)}}
-            <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}${{fmtVol(c.volume)}}</span>
+            <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
+            ${{c.volume ? `<span class="rank-vol">Vol: ${{c.volume.toLocaleString("en-US")}}</span>` : ""}}
           </div>
         </div>`;
     }}).join("");
 
-    const chartId    = `oi-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-${{h}}`;
-    const momentumId = `mom-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-${{h}}`;
+    const safeTickerId = ticker.ticker.replace(/[^A-Za-z0-9]/g,"-");
+    const chartId    = `oi-chart-${{safeTickerId}}-${{h}}`;
+    const volChartId = `vol-chart-${{safeTickerId}}-${{h}}`;
+    const momentumId = `mom-chart-${{safeTickerId}}-${{h}}`;
+
+    // OI chart
     const chartHtml = contracts.length > 0 ? `
       <div class="oi-chart-wrap">
         <div class="oi-chart-label">Top OI by strike</div>
         <canvas id="${{chartId}}" style="height:125px"></canvas>
+      </div>` : "";
+
+    // Volume column — top 3 by today's volume, then volume chart
+    const contractsByVol = [...contracts].sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+    const volRankRows = contractsByVol.slice(0, 3).map((c, i) => {{
+      if (!c || !c.signal) return `
+        <div class="rank-row">
+          <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+          <div class="rank-detail"><span class="pct na">N/A</span></div>
+        </div>`;
+      const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
+      return `
+        <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
+          <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+          <div class="rank-detail">
+            <span class="rank-strike">$${{c.strike ?? "—"}}</span>
+            ${{badgeCompact(c.signal)}}
+            ${{fmtDetail(c.forecast_pct)}}
+            <span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>
+            <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
+          </div>
+        </div>`;
+    }}).join("");
+    const volChartHtml = contractsByVol.some(c => (c.volume ?? 0) > 0) ? `
+      <div class="oi-chart-wrap">
+        <div class="oi-chart-label">Top Volume by strike</div>
+        <canvas id="${{volChartId}}" style="height:125px"></canvas>
       </div>` : "";
 
     // OI momentum chart — only if there is expiry history (≥ 1 data point)
@@ -1355,10 +1416,17 @@ function buildDetailCellContent(ticker) {{
       : "";
     const bodyContent = rightCol
       ? `<div class="horizon-block-body">
-          <div class="horizon-block-left">${{rankRows}}${{chartHtml}}</div>
+          <div class="horizon-block-left">
+            <div class="col-section-label">Open Interest</div>
+            ${{rankRows}}${{chartHtml}}
+          </div>
+          <div class="horizon-block-middle">
+            <div class="col-section-label">Today's Volume</div>
+            ${{volRankRows}}${{volChartHtml}}
+          </div>
           ${{rightCol}}
         </div>`
-      : `${{rankRows}}${{chartHtml}}`;
+      : `<div class="col-section-label">Open Interest</div>${{rankRows}}${{chartHtml}}`;
 
     return `<div class="horizon-block">
       <div class="horizon-block-header">
@@ -1382,19 +1450,16 @@ function buildDetailCellContent(ticker) {{
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
             <div class="rank-detail"><span class="pct na">N/A</span></div>
           </div>`;
-        const moneynessLabel = c.moneyness
-          ? `<span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:3px;padding:1px 4px;">${{c.moneyness}}</span>`
-          : "";
         const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
         return `
           <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
             <div class="rank-detail">
               <span class="rank-strike">$${{c.strike ?? "—"}}</span>
-              ${{moneynessLabel}}
-              ${{badge(c.signal)}}
-              ${{fmt(c.forecast_pct)}}
-              <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}${{fmtVol(c.volume)}}</span>
+              ${{badgeCompact(c.signal)}}
+              ${{fmtDetail(c.forecast_pct)}}
+              <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
+              ${{c.volume ? `<span class="rank-vol">Vol: ${{c.volume.toLocaleString("en-US")}}</span>` : ""}}
             </div>
           </div>`;
       }}).join("");
@@ -1664,6 +1729,147 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
             maxRotation: 40,
             callback: v => `$${{v}}`,
             // Show at most ~8 tick labels regardless of how many strikes there are
+            maxTicksLimit: 8,
+          }},
+          grid: {{ color: "#1e2235" }},
+        }},
+        y: {{
+          stacked: true,
+          ticks: {{
+            color: "#64748b", font: {{ size: 9 }},
+            callback: v => v >= 1000 ? (v / 1000).toFixed(0) + "k" : v,
+          }},
+          grid: {{ color: "#1e2235" }},
+        }},
+      }},
+    }},
+  }};
+}}
+// ─────────────────────────────────────────────────────────────────────────────
+// Volume bar chart — same structure as OI chart but uses today's volume data.
+// byStrike[s] = {{ call: callVol, put: putVol, callOI, putOI, callSig, putSig }}
+function buildVolChartConfig(strikes, byStrike, currentPrice) {{
+  const BAR_THICKNESS = 3;
+  const priceLinePlugin = {{
+    id: "priceLineVol",
+    beforeDraw(chart) {{
+      const xScale = chart.scales.x;
+      if (!xScale || currentPrice == null) return;
+      const xPx = xScale.getPixelForValue(currentPrice);
+      if (xPx < xScale.left || xPx > xScale.right) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = "rgba(250,204,21,0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(xPx, chart.chartArea.top);
+      ctx.lineTo(xPx, chart.chartArea.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }}
+  }};
+
+  return {{
+    type: "bar",
+    plugins: [priceLinePlugin],
+    data: {{
+      datasets: [
+        {{
+          label: "Call Vol",
+          data: strikes.map(s => ({{ x: s, y: byStrike[s]?.call ?? 0 }})),
+          backgroundColor: "rgba(96,165,250,0.75)",
+          borderColor: "rgba(96,165,250,1)",
+          borderWidth: 1, borderRadius: 2,
+          barThickness: BAR_THICKNESS,
+          stack: "vol",
+        }},
+        {{
+          label: "Put Vol",
+          data: strikes.map(s => ({{ x: s, y: byStrike[s]?.put ?? 0 }})),
+          backgroundColor: "rgba(251,146,60,0.75)",
+          borderColor: "rgba(251,146,60,1)",
+          borderWidth: 1, borderRadius: 2,
+          barThickness: BAR_THICKNESS,
+          stack: "vol",
+        }},
+      ]
+    }},
+    options: {{
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {{
+        legend: {{
+          display: true, position: "top", align: "end",
+          labels: {{ color: "#94a3b8", boxWidth: 10, font: {{ size: 9 }}, padding: 6 }},
+        }},
+        tooltip: {{
+          enabled: false,
+          external(context) {{
+            const {{chart, tooltip}} = context;
+            const TTID = "vol-ext-tooltip";
+            let el = document.getElementById(TTID);
+            if (!el) {{
+              el = document.createElement("div");
+              el.id = TTID;
+              el.style.cssText = [
+                "position:fixed","pointer-events:none","z-index:9999",
+                "background:#1a1d27","border:1px solid #2e3250","border-radius:6px",
+                "padding:8px 10px","font-size:11px","line-height:1.6",
+                "color:#94a3b8","white-space:nowrap","transition:opacity .1s",
+              ].join(";");
+              document.body.appendChild(el);
+            }}
+            if (tooltip.opacity === 0) {{ el.style.opacity = "0"; return; }}
+            const dp = tooltip.dataPoints?.[0];
+            if (!dp) {{ el.style.opacity = "0"; return; }}
+            const s = dp.parsed.x;
+            const d = byStrike[s] ?? {{}};
+
+            let html = `<div style="color:#e2e8f0;font-weight:600;margin-bottom:4px">Strike $${{s}}</div>`;
+            if (d.call > 0)
+              html += `<div><span style="color:#60a5fa">● Call Vol:</span> ${{d.call.toLocaleString()}}` +
+                      `${{d.callOI ? ` | OI: ${{d.callOI.toLocaleString()}}` : ""}}` +
+                      `${{d.callSig ? ` | ${{d.callSig}}` : ""}}</div>`;
+            if (d.put > 0)
+              html += `<div><span style="color:#fb923c">● Put  Vol:</span> ${{d.put.toLocaleString()}}` +
+                      `${{d.putOI  ? ` | OI: ${{d.putOI.toLocaleString()}}`  : ""}}` +
+                      `${{d.putSig ? ` | ${{d.putSig}}`  : ""}}</div>`;
+            if (currentPrice != null)
+              html += `<div style="margin-top:4px;color:#facc15">Current price: $${{currentPrice}}</div>`;
+            el.innerHTML = html;
+
+            const rect = chart.canvas.getBoundingClientRect();
+            const tp   = tooltip.caretX + rect.left;
+            const ty   = tooltip.caretY + rect.top;
+            const vw   = window.innerWidth, vh = window.innerHeight;
+            el.style.opacity = "1";
+            el.style.left = ""; el.style.right = "";
+            el.style.top  = ""; el.style.bottom = "";
+            if (tp + el.offsetWidth + 12 > vw) {{
+              el.style.right = (vw - tp + 8) + "px";
+            }} else {{
+              el.style.left  = (tp + 12) + "px";
+            }}
+            if (ty + el.offsetHeight + 8 > vh) {{
+              el.style.bottom = (vh - ty + 4) + "px";
+            }} else {{
+              el.style.top = (ty - el.offsetHeight / 2) + "px";
+            }}
+          }},
+        }},
+      }},
+      scales: {{
+        x: {{
+          type: "linear",
+          stacked: true,
+          offset: true,
+          ticks: {{
+            color: "#64748b",
+            font: {{ size: 9 }},
+            maxRotation: 40,
+            callback: v => `$${{v}}`,
             maxTicksLimit: 8,
           }},
           grid: {{ color: "#1e2235" }},
@@ -2024,6 +2230,37 @@ function initOICharts(tickerStr, tickerData) {{
       const el = document.getElementById("oi-ext-tooltip");
       if (el) el.style.opacity = "0";
     }});
+
+    // Volume chart for this horizon
+    const volCanvas = document.getElementById(`vol-chart-${{safeId}}-${{h}}`);
+    if (volCanvas) {{
+      const allContracts = hData?.contracts ?? [];
+      const top10Vol = [...allContracts].filter(c => (c.volume ?? 0) > 0)
+        .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0)).slice(0, 10);
+      if (top10Vol.length > 0) {{
+        const volStrikes = [...new Set(top10Vol.map(c => c.strike))].sort((a, b) => a - b);
+        const byStrikeVol = {{}};
+        top10Vol.forEach(c => {{
+          const k = c.strike;
+          if (!byStrikeVol[k]) byStrikeVol[k] = {{ call: 0, put: 0, callOI: 0, putOI: 0, callSig: null, putSig: null }};
+          if (c.type === "Call") {{
+            byStrikeVol[k].call   = c.volume ?? 0;
+            byStrikeVol[k].callOI = c.open_interest ?? 0;
+            byStrikeVol[k].callSig = c.signal;
+          }} else {{
+            byStrikeVol[k].put    = c.volume ?? 0;
+            byStrikeVol[k].putOI  = c.open_interest ?? 0;
+            byStrikeVol[k].putSig = c.signal;
+          }}
+        }});
+        const volChart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(volStrikes, byStrikeVol, currentPrice));
+        oiCharts[tickerStr].push(volChart);
+        volCanvas.addEventListener("mouseleave", () => {{
+          const el = document.getElementById("vol-ext-tooltip");
+          if (el) el.style.opacity = "0";
+        }});
+      }}
+    }}
   }});
 
   // OI Momentum line charts (one per horizon)
