@@ -1593,31 +1593,65 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
           labels: {{ color: "#94a3b8", boxWidth: 10, font: {{ size: 9 }}, padding: 6 }},
         }},
         tooltip: {{
-          mode: "index", intersect: false,
-          callbacks: {{
-            title: items => `Strike $${{items[0].parsed.x}}`,
-            label(ctx) {{
-              const s = ctx.parsed.x;
-              const d = byStrike[s] ?? {{}};
-              if (ctx.dataset.label === "Call OI")
-                return d.call > 0
-                  ? `Call OI: ${{d.call.toLocaleString()}} | Vol: ${{d.callVol?.toLocaleString()}}${{d.callSig ? " | " + d.callSig : ""}}`
-                  : null;
-              return d.put > 0
-                ? `Put  OI: ${{d.put.toLocaleString()}} | Vol: ${{d.putVol?.toLocaleString()}}${{d.putSig ? " | " + d.putSig : ""}}`
-                : null;
-            }},
-            filter: item => item.parsed.y > 0,
-            afterBody: items => {{
-              if (currentPrice != null && items.length > 0) {{
-                const s = items[0].parsed.x;
-                return [`Current price: $${{currentPrice}}`];
-              }}
-              return [];
-            }},
+          enabled: false,
+          external(context) {{
+            const {{chart, tooltip}} = context;
+            const TTID = "oi-ext-tooltip";
+            let el = document.getElementById(TTID);
+            if (!el) {{
+              el = document.createElement("div");
+              el.id = TTID;
+              el.style.cssText = [
+                "position:fixed","pointer-events:none","z-index:9999",
+                "background:#1a1d27","border:1px solid #2e3250","border-radius:6px",
+                "padding:8px 10px","font-size:11px","line-height:1.6",
+                "color:#94a3b8","white-space:nowrap","transition:opacity .1s",
+              ].join(";");
+              document.body.appendChild(el);
+            }}
+            if (tooltip.opacity === 0) {{ el.style.opacity = "0"; return; }}
+
+            const dp = tooltip.dataPoints?.[0];
+            if (!dp) {{ el.style.opacity = "0"; return; }}
+            const s = dp.parsed.x;
+            const d = byStrike[s] ?? {{}};
+
+            let html = `<div style="color:#e2e8f0;font-weight:600;margin-bottom:4px">Strike $${{s}}</div>`;
+            if (d.call > 0)
+              html += `<div><span style="color:#22c55e">● Call OI:</span> ${{d.call.toLocaleString()}}` +
+                      `${{d.callVol ? ` | Vol: ${{d.callVol.toLocaleString()}}` : ""}}` +
+                      `${{d.callSig ? ` | ${{d.callSig}}` : ""}}</div>`;
+            if (d.put > 0)
+              html += `<div><span style="color:#ef4444">● Put  OI:</span> ${{d.put.toLocaleString()}}` +
+                      `${{d.putVol  ? ` | Vol: ${{d.putVol.toLocaleString()}}`  : ""}}` +
+                      `${{d.putSig  ? ` | ${{d.putSig}}`  : ""}}</div>`;
+            if (currentPrice != null)
+              html += `<div style="margin-top:4px;color:#facc15">Current price: $${{currentPrice}}</div>`;
+            el.innerHTML = html;
+
+            // Use fixed positioning via getBoundingClientRect so overflow:hidden parents can't clip it
+            const rect  = chart.canvas.getBoundingClientRect();
+            const tp    = tooltip.caretX + rect.left;
+            const ty    = tooltip.caretY + rect.top;
+            const vw    = window.innerWidth, vh = window.innerHeight;
+            el.style.opacity = "1";
+            el.style.left = "";
+            el.style.right = "";
+            el.style.top  = "";
+            el.style.bottom = "";
+            // Flip horizontally if too close to right edge
+            if (tp + el.offsetWidth + 12 > vw) {{
+              el.style.right = (vw - tp + 8) + "px";
+            }} else {{
+              el.style.left  = (tp + 12) + "px";
+            }}
+            // Flip vertically if too close to bottom
+            if (ty + el.offsetHeight + 8 > vh) {{
+              el.style.bottom = (vh - ty + 4) + "px";
+            }} else {{
+              el.style.top = (ty - el.offsetHeight / 2) + "px";
+            }}
           }},
-          backgroundColor: "#1a1d27", borderColor: "#2e3250", borderWidth: 1,
-          titleColor: "#e2e8f0", bodyColor: "#94a3b8", padding: 8,
         }},
       }},
       scales: {{
@@ -1987,6 +2021,10 @@ function initOICharts(tickerStr, tickerData) {{
 
     const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
     oiCharts[tickerStr].push(chart);
+    canvas.addEventListener("mouseleave", () => {{
+      const el = document.getElementById("oi-ext-tooltip");
+      if (el) el.style.opacity = "0";
+    }});
   }});
 
   // OI Momentum line charts (one per horizon)
@@ -2027,6 +2065,10 @@ function initOICharts(tickerStr, tickerData) {{
 
     const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
     oiCharts[tickerStr].push(chart);
+    canvas.addEventListener("mouseleave", () => {{
+      const el = document.getElementById("oi-ext-tooltip");
+      if (el) el.style.opacity = "0";
+    }});
   }});
 }}
 
