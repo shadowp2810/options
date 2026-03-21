@@ -2267,7 +2267,7 @@ function buildMomentumChartConfig(historyArr, showXTicks = false) {{
             // Group datapoints by strike, separate call vs put
             const byStrike = {{}};
             tooltip.dataPoints.forEach(item => {{
-              const m = (item.dataset.label || "").match(/\$?([\d.]+)\s+(C|P)$/);
+              const m = (item.dataset.label || "").match(/[$]?([0-9.]+)[ ]+(C|P)$/);
               if (!m) return;
               const [, strike, type] = m;
               if (!byStrike[strike]) byStrike[strike] = {{ call: 0, put: 0 }};

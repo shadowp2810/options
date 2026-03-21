@@ -47,8 +47,8 @@ _RANK_FILLS_3 = [
     PatternFill("solid", fgColor="EBF3FB"),
     PatternFill("solid", fgColor="F5F9FE"),
 ]
-# Extend to 25 ranks — ranks 4+ use the lightest shade
-RANK_FILLS = _RANK_FILLS_3 + [_RANK_FILLS_3[-1]] * 22
+# Extend to 50 ranks — ranks 4+ use the lightest shade
+RANK_FILLS = _RANK_FILLS_3 + [_RANK_FILLS_3[-1]] * 47
 
 WHITE_FONT   = Font(color="FFFFFF", bold=True)
 BOLD_FONT    = Font(bold=True)
