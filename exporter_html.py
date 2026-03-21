@@ -41,6 +41,9 @@ def write_html(
     suppressed = snapshot_info.get("suppressed", False)
     snap_generated = snapshot_info.get("generated")
     daily_oi_label = snapshot_info.get("daily_oi_label", "yesterday")  # e.g. "Friday", "yesterday"
+    from datetime import date as _dt
+    _wd = _dt.today().weekday()
+    volume_label = "Last Friday's Volume" if _wd >= 5 else "Today's Volume"
 
     if suppressed:
         delta_context = f'<span class="delta-stale">⚠ Δ suppressed — snapshot is {age_days}d old (limit: {snapshot_info.get("max_age", 3)}d)</span>'
@@ -214,12 +217,9 @@ def write_html(
   .intraweek-section {{ margin-top: 14px; border-top: 1px dashed #2e3250; padding-top: 10px; padding-bottom: 6px; }}
   .intraweek-header {{ font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #818cf8; margin-bottom: 8px; }}
   .intraweek-blocks {{ display: flex; flex-wrap: wrap; gap: 8px; }}
-  .intraweek-block {{ background: #13162a; border: 1px solid #2a2d4a; border-radius: 8px; padding: 8px 10px; min-width: 160px; flex: 0 0 auto; }}
   @media (max-width: 600px) {{
     .intraweek-section {{
       max-width: calc(100vw - 32px);
-      /* overflow:clip clips visually without creating a scroll context,
-         so it won't block child momentum scroll on iOS */
       overflow: clip;
     }}
     .intraweek-blocks {{
@@ -230,14 +230,11 @@ def write_html(
       touch-action: pan-x;
       padding-bottom: 8px;
     }}
-    .intraweek-block {{
+    .intraweek-blocks .horizon-block {{
       flex: 0 0 82vw;
       min-width: 0;
     }}
   }}
-  .intraweek-block-header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }}
-  .intraweek-day {{ font-size: 11px; font-weight: 700; color: #818cf8; }}
-  .intraweek-expiry {{ font-size: 10px; color: var(--text-dim); }}
   .pill {{
     padding: 5px 13px;
     border-radius: 20px;
@@ -601,22 +598,15 @@ def write_html(
     letter-spacing: 0.5px;
     color: #a78bfa;
     margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }}
-  .momentum-chart-label::before {{
-    content: "↗";
-    font-size: 10px;
   }}
   .momentum-expand-btn {{
     position: absolute;
     top: 6px;
     right: 8px;
-    background: rgba(30,25,50,0.85);
-    border: 1px solid #4c3a8a;
+    background: rgba(5,46,22,0.85);
+    border: 1px solid #166534;
     border-radius: 4px;
-    color: #a78bfa;
+    color: #4ade80;
     font-size: 10px;
     padding: 2px 7px;
     cursor: pointer;
@@ -625,7 +615,7 @@ def write_html(
     transition: background 0.15s, border-color 0.15s;
   }}
   .momentum-expand-btn:hover {{
-    background: rgba(167,139,250,0.18);
+    background: rgba(74,222,128,0.15);
   }}
   /* ---- Custom floating stacked-bar tooltip for OI Momentum ---- */
   .mom-tooltip {{
@@ -708,6 +698,94 @@ def write_html(
   }}
 
   /* ---- Momentum fullscreen modal ---- */
+  /* ---- Bar chart (OI / Volume) expand modal ---- */
+  #bar-modal {{
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+  }}
+  #bar-modal.open {{ display: flex; }}
+  #bar-modal-box {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px 20px;
+    width: min(96vw, 1200px);
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+  }}
+  #bar-modal-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #4ade80;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    flex-shrink: 0;
+  }}
+  #bar-modal-title {{ font-weight: 600; }}
+  #bar-modal-close {{
+    background: none;
+    border: 1px solid #166534;
+    border-radius: 6px;
+    color: #4ade80;
+    font-size: 16px;
+    padding: 2px 10px;
+    cursor: pointer;
+    line-height: 1.5;
+  }}
+  #bar-modal-close:hover {{ background: rgba(74,222,128,0.1); }}
+  /* Two-chart layout inside the expanded bar modal */
+  #bar-modal-charts {{
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    gap: 16px;
+    min-height: 0;
+  }}
+  .bar-modal-half {{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }}
+  .bar-modal-chart-title {{
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #4ade80;
+    font-weight: 600;
+    flex-shrink: 0;
+  }}
+  .bar-modal-canvas-wrap {{
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }}
+  /* Single combined expand button — lives in the horizon-block-header */
+  .bar-expand-btn {{
+    background: rgba(5,46,22,0.85);
+    border: 1px solid #166534;
+    border-radius: 4px;
+    color: #4ade80;
+    font-size: 10px;
+    padding: 2px 7px;
+    cursor: pointer;
+    line-height: 1.6;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+  }}
+  .bar-expand-btn:hover {{ background: rgba(74,222,128,0.15); }}
   #mom-modal {{
     display: none;
     position: fixed;
@@ -843,13 +921,8 @@ def write_html(
     border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px;
   }}
 
-  /* ---- Signal flip alert ---- */
-  .flip-badge {{
-    display: inline-flex; align-items: center; gap: 3px;
-    background: #1a0a2e; color: #a78bfa;
-    border: 1px solid #4c1d9544; border-radius: 4px;
-    padding: 1px 6px; font-size: 10px; font-weight: 700;
-  }}
+  /* ---- Signal flip alert (compact, lives in rank-num-col) ---- */
+  .badge.flip {{ background: #1a0a2e; color: #a78bfa; border-color: #4c1d9544; }}
 
   /* ---- Scrollbar ---- */
   ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
@@ -916,6 +989,29 @@ def write_html(
     </div>
     <div id="mom-modal-canvas-wrap">
       <canvas id="mom-modal-canvas"></canvas>
+    </div>
+  </div>
+</div>
+<!-- Bar chart (OI / Volume) fullscreen modal (single instance, reused) -->
+<div id="bar-modal" role="dialog" aria-modal="true" aria-labelledby="bar-modal-title">
+  <div id="bar-modal-box">
+    <div id="bar-modal-header">
+      <span id="bar-modal-title"></span>
+      <button id="bar-modal-close" onclick="closeBarModal()" title="Close (Esc)">✕</button>
+    </div>
+    <div id="bar-modal-charts">
+      <div class="bar-modal-half">
+        <div class="bar-modal-chart-title">Top OI by Strike</div>
+        <div class="bar-modal-canvas-wrap">
+          <canvas id="bar-modal-canvas-oi"></canvas>
+        </div>
+      </div>
+      <div class="bar-modal-half">
+        <div class="bar-modal-chart-title">Top Volume by Strike</div>
+        <div class="bar-modal-canvas-wrap">
+          <canvas id="bar-modal-canvas-vol"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1070,6 +1166,7 @@ const RAW = {data_payload};
 const HORIZONS = ["fri","7d","30d","45d","60d","90d","180d","1y"];
 const HORIZON_LABELS = {{"fri":"This Friday","7d":"7 Days","30d":"1 Month","45d":"45 Days","60d":"60 Days","90d":"90 Days","180d":"6 Months","1y":"1 Year"}};
 const DAILY_OI_LABEL = "{daily_oi_label}";  // "yesterday", "Friday", etc.
+const VOLUME_LABEL = "{volume_label}";       // "Today's Volume" or "Last Friday's Volume"
 const TOP_N = {TOP_N};
 
 let state = {{
@@ -1143,7 +1240,8 @@ function deltaBadge(c) {{
 
 function flipBadge(c) {{
   if (!c.signal_flipped || !c.prev_signal) return "";
-  return `<span class="flip-badge">↺ ${{c.prev_signal}}→${{c.signal}}</span>`;
+  const arrow = c.signal === "BUY" ? "S→B" : "B→S";
+  return `<span class="badge flip" style="font-size:8px;padding:1px 4px">${{arrow}}</span>`;
 }}
 function getTopContract(ticker, period) {{
   const h = ticker.horizons[period];
@@ -1360,13 +1458,13 @@ function buildDetailCellContent(ticker) {{
           <div class="rank-num-col">
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
             ${{badgeCompact(c.signal)}}
+            ${{flipBadge(c)}}
           </div>
           <div class="rank-detail">
             <span class="rank-strike">$${{c.strike ?? "—"}}</span>
             ${{fmtDetail(c.forecast_pct)}}
-            ${{flipBadge(c)}}
             <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
-            ${{c.volume ? `<span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>` : ""}}
+            <span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>
           </div>
         </div>`;
     }}).join("");
@@ -1417,7 +1515,7 @@ function buildDetailCellContent(ticker) {{
     const momentumHtml = histForExpiry.length >= 1 ? `
       <div class="momentum-chart-wrap">
         <div class="momentum-chart-label">OI Momentum</div>
-        <button class="momentum-expand-btn" onclick="openMomModal('${{momentumId}}','${{ticker.ticker}} · ${{HORIZON_LABELS[h]}} · OI Momentum')">⤢ Expand</button>
+        <button class="momentum-expand-btn" onclick="openMomModal('${{momentumId}}','${{ticker.ticker}} · ${{HORIZON_LABELS[h]}} · OI Momentum')">⤢</button>
         <canvas id="${{momentumId}}" style="height:135px"></canvas>
       </div>` : "";
 
@@ -1431,17 +1529,21 @@ function buildDetailCellContent(ticker) {{
             ${{rankRows}}${{chartHtml}}
           </div>
           <div class="horizon-block-middle">
-            <div class="col-section-label">Today's Volume</div>
+            <div class="col-section-label">${{VOLUME_LABEL}}</div>
             ${{volRankRows}}${{volChartHtml}}
           </div>
           ${{rightCol}}
         </div>`
       : `<div class="col-section-label">Open Interest</div>${{rankRows}}${{chartHtml}}`;
 
+    const hasBarCharts = contracts.length > 0 || contractsByVol.some(c => (c.volume ?? 0) > 0);
+    const barExpandBtn = hasBarCharts
+      ? `<button class="bar-expand-btn" onclick="openBarModal('${{chartId}}','${{volChartId}}','${{ticker.ticker}} · ${{HORIZON_LABELS[h]}}')">⤢</button>`
+      : "";
     return `<div class="horizon-block">
       <div class="horizon-block-header">
         <span>${{HORIZON_LABELS[h]}} ${{earningsBadge(earningsInWin, ticker.earnings_date)}}</span>
-        <span class="expiry">${{expiry ?? "N/A"}}</span>
+        <div style="display:flex;align-items:center;gap:8px">${{barExpandBtn}}<span class="expiry">${{expiry ?? "N/A"}}</span></div>
       </div>
       ${{bodyContent}}
     </div>`;
@@ -1453,8 +1555,43 @@ function buildDetailCellContent(ticker) {{
   if (iw.length > 0) {{
     const iwBlocks = iw.map(entry => {{
       const rankClasses = ["r1", "r2", "r3"];
-      // Top 3 rank rows only
-      const rows = entry.contracts.slice(0, 3).map((c, i) => {{
+      const safeIwId = `${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-iw-${{entry.expiry.replace(/[^0-9]/g,"")}}`;
+
+      // OI rank rows (top 3 by OI)
+      const iwRankRows = entry.contracts.slice(0, 3).map((c, i) => {{
+        if (!c || !c.signal) return `
+          <div class="rank-row">
+            <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+            <div class="rank-detail"><span class="pct na">N/A</span></div>
+          </div>`;
+        const dimmed = state.minOI > 0 && (c.open_interest == null || c.open_interest < state.minOI);
+        return `
+          <div class="rank-row${{dimmed ? " rank-row-dimmed" : ""}}">
+            <div class="rank-num-col">
+              <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
+              ${{badgeCompact(c.signal)}}
+              ${{flipBadge(c)}}
+            </div>
+            <div class="rank-detail">
+              <span class="rank-strike">$${{c.strike ?? "—"}}</span>
+              ${{fmtDetail(c.forecast_pct)}}
+              <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
+              <span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>
+            </div>
+          </div>`;
+      }}).join("");
+
+      // OI chart
+      const iwChartId = `oi-chart-${{safeIwId}}`;
+      const iwChartHtml = entry.contracts.length > 0 ? `
+        <div class="oi-chart-wrap">
+          <div class="oi-chart-label">Top OI by strike</div>
+          <canvas id="${{iwChartId}}" style="height:125px"></canvas>
+        </div>` : "";
+
+      // Volume rank rows (top 3 by volume)
+      const iwContractsByVol = [...entry.contracts].sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+      const iwVolRankRows = iwContractsByVol.slice(0, 3).map((c, i) => {{
         if (!c || !c.signal) return `
           <div class="rank-row">
             <div class="rank-num ${{rankClasses[i]}}">${{i + 1}}</div>
@@ -1470,24 +1607,65 @@ function buildDetailCellContent(ticker) {{
             <div class="rank-detail">
               <span class="rank-strike">$${{c.strike ?? "—"}}</span>
               ${{fmtDetail(c.forecast_pct)}}
+              <span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>
               <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}</span>
-              ${{c.volume ? `<span class="rank-vol">Vol: ${{fmtOI(c.volume)}}</span>` : ""}}
             </div>
           </div>`;
       }}).join("");
-      const iwChartId = `oi-chart-${{ticker.ticker.replace(/[^A-Za-z0-9]/g,"-")}}-iw-${{entry.expiry}}`;
-      const iwChartHtml = entry.contracts.length > 0 ? `
+
+      const iwVolChartId = `vol-chart-${{safeIwId}}`;
+      const iwVolChartHtml = iwContractsByVol.some(c => (c.volume ?? 0) > 0) ? `
         <div class="oi-chart-wrap">
-          <div class="oi-chart-label">Top OI by strike</div>
-          <canvas id="${{iwChartId}}" style="height:125px"></canvas>
+          <div class="oi-chart-label">Top Volume by strike</div>
+          <canvas id="${{iwVolChartId}}" style="height:125px"></canvas>
         </div>` : "";
-      return `<div class="intraweek-block">
-        <div class="intraweek-block-header">
-          <span class="intraweek-day">${{entry.day}}</span>
-          <span class="intraweek-expiry">${{entry.expiry}}</span>
+
+      // OI Momentum (if history available)
+      const iwHistForExpiry = ticker.expiry_history?.[entry.expiry] ?? [];
+      const iwMomentumId = `mom-chart-${{safeIwId}}`;
+      const iwMomentumHtml = iwHistForExpiry.length >= 1 ? `
+        <div class="momentum-chart-wrap">
+          <div class="momentum-chart-label">OI Momentum</div>
+          <button class="momentum-expand-btn" onclick="openMomModal('${{iwMomentumId}}','${{ticker.ticker}} · ${{entry.expiry}} · OI Momentum')">⤢</button>
+          <canvas id="${{iwMomentumId}}" style="height:135px"></canvas>
+        </div>` : "";
+
+      const iwRightCol = iwMomentumHtml
+        ? `<div class="horizon-block-right">${{iwMomentumHtml}}</div>`
+        : "";
+      const iwBodyContent = iwRightCol
+        ? `<div class="horizon-block-body">
+            <div class="horizon-block-left">
+              <div class="col-section-label">Open Interest</div>
+              ${{iwRankRows}}${{iwChartHtml}}
+            </div>
+            <div class="horizon-block-middle">
+              <div class="col-section-label">${{VOLUME_LABEL}}</div>
+              ${{iwVolRankRows}}${{iwVolChartHtml}}
+            </div>
+            ${{iwRightCol}}
+          </div>`
+        : `<div class="horizon-block-body">
+            <div class="horizon-block-left">
+              <div class="col-section-label">Open Interest</div>
+              ${{iwRankRows}}${{iwChartHtml}}
+            </div>
+            <div class="horizon-block-middle">
+              <div class="col-section-label">${{VOLUME_LABEL}}</div>
+              ${{iwVolRankRows}}${{iwVolChartHtml}}
+            </div>
+          </div>`;
+
+      const iwHasBarCharts = entry.contracts.length > 0 || iwContractsByVol.some(c => (c.volume ?? 0) > 0);
+      const iwBarExpandBtn = iwHasBarCharts
+        ? `<button class="bar-expand-btn" onclick="openBarModal('${{iwChartId}}','${{iwVolChartId}}','${{ticker.ticker}} · ${{entry.expiry}}')">⤢</button>`
+        : "";
+      return `<div class="horizon-block">
+        <div class="horizon-block-header">
+          <span>${{entry.day}}</span>
+          <div style="display:flex;align-items:center;gap:8px">${{iwBarExpandBtn}}<span class="expiry">${{entry.expiry}}</span></div>
         </div>
-        ${{rows}}
-        ${{iwChartHtml}}
+        ${{iwBodyContent}}
       </div>`;
     }}).join("");
     intraweekHtml = `<div class="intraweek-section">
@@ -2195,27 +2373,32 @@ function initOICharts(tickerStr, tickerData) {{
     const contracts = (hData?.contracts ?? []).filter(c => c && (c.open_interest ?? 0) > 0);
     if (contracts.length === 0) return;
 
-    // Pick top 10 by OI, then group by strike for stacked call/put view
-    const top10 = [...contracts].sort((a, b) => b.open_interest - a.open_interest).slice(0, 10);
-    const strikes = [...new Set(top10.map(c => c.strike))].sort((a, b) => a - b);
-
-    // Build a map: strike -> {{call: oi, put: oi, callVol, putVol}}
-    const byStrike = {{}};
-    top10.forEach(c => {{
+    // Rank strikes by combined (call+put) OI so both sides are always shown.
+    // Group all contracts by strike first, then pick top 10 strikes by total OI.
+    const allByStrikeOI = {{}};
+    contracts.forEach(c => {{
       const k = c.strike;
-      if (!byStrike[k]) byStrike[k] = {{ call: 0, put: 0, callVol: 0, putVol: 0, callSig: null, putSig: null }};
+      if (!allByStrikeOI[k]) allByStrikeOI[k] = {{ call:0, put:0, callVol:0, putVol:0, callSig:null, putSig:null }};
       if (c.type === "Call") {{
-        byStrike[k].call    = c.open_interest ?? 0;
-        byStrike[k].callVol = c.volume ?? 0;
-        byStrike[k].callSig = c.signal;
+        allByStrikeOI[k].call    = c.open_interest ?? 0;
+        allByStrikeOI[k].callVol = c.volume ?? 0;
+        allByStrikeOI[k].callSig = c.signal;
       }} else {{
-        byStrike[k].put    = c.open_interest ?? 0;
-        byStrike[k].putVol = c.volume ?? 0;
-        byStrike[k].putSig = c.signal;
+        allByStrikeOI[k].put    = c.open_interest ?? 0;
+        allByStrikeOI[k].putVol = c.volume ?? 0;
+        allByStrikeOI[k].putSig = c.signal;
       }}
     }});
+    const strikes = Object.entries(allByStrikeOI)
+      .sort(([, a], [, b]) => (b.call + b.put) - (a.call + a.put))
+      .slice(0, 10)
+      .map(([k]) => parseFloat(k))
+      .sort((a, b) => a - b);
+    const byStrike = {{}};
+    strikes.forEach(k => {{ byStrike[k] = allByStrikeOI[k]; }});
 
     const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
+    canvas._barChartData = {{ strikes, byStrike, currentPrice, type: "oi" }};
     oiCharts[tickerStr].push(chart);
     canvas.addEventListener("mouseleave", () => {{
       const el = document.getElementById("oi-ext-tooltip");
@@ -2228,23 +2411,31 @@ function initOICharts(tickerStr, tickerData) {{
       const allContracts = hData?.contracts ?? [];
       const top10Vol = [...allContracts].filter(c => (c.volume ?? 0) > 0)
         .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0)).slice(0, 10);
-      if (top10Vol.length > 0) {{
-        const volStrikes = [...new Set(top10Vol.map(c => c.strike))].sort((a, b) => a - b);
+      const allByStrikeVol = {{}};
+      allContracts.filter(c => (c.volume ?? 0) > 0).forEach(c => {{
+        const k = c.strike;
+        if (!allByStrikeVol[k]) allByStrikeVol[k] = {{ call:0, put:0, callOI:0, putOI:0, callSig:null, putSig:null }};
+        if (c.type === "Call") {{
+          allByStrikeVol[k].call   = c.volume ?? 0;
+          allByStrikeVol[k].callOI = c.open_interest ?? 0;
+          allByStrikeVol[k].callSig = c.signal;
+        }} else {{
+          allByStrikeVol[k].put    = c.volume ?? 0;
+          allByStrikeVol[k].putOI  = c.open_interest ?? 0;
+          allByStrikeVol[k].putSig = c.signal;
+        }}
+      }});
+      const volStrikesTop = Object.entries(allByStrikeVol)
+        .sort(([, a], [, b]) => (b.call + b.put) - (a.call + a.put))
+        .slice(0, 10)
+        .map(([k]) => parseFloat(k))
+        .sort((a, b) => a - b);
+      if (volStrikesTop.length > 0) {{
+        const volStrikes = volStrikesTop;
         const byStrikeVol = {{}};
-        top10Vol.forEach(c => {{
-          const k = c.strike;
-          if (!byStrikeVol[k]) byStrikeVol[k] = {{ call: 0, put: 0, callOI: 0, putOI: 0, callSig: null, putSig: null }};
-          if (c.type === "Call") {{
-            byStrikeVol[k].call   = c.volume ?? 0;
-            byStrikeVol[k].callOI = c.open_interest ?? 0;
-            byStrikeVol[k].callSig = c.signal;
-          }} else {{
-            byStrikeVol[k].put    = c.volume ?? 0;
-            byStrikeVol[k].putOI  = c.open_interest ?? 0;
-            byStrikeVol[k].putSig = c.signal;
-          }}
-        }});
+        volStrikes.forEach(k => {{ byStrikeVol[k] = allByStrikeVol[k]; }});
         const volChart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(volStrikes, byStrikeVol, currentPrice));
+        volCanvas._barChartData = {{ strikes: volStrikes, byStrike: byStrikeVol, currentPrice, type: "vol" }};
         oiCharts[tickerStr].push(volChart);
         volCanvas.addEventListener("mouseleave", () => {{
           const el = document.getElementById("vol-ext-tooltip");
@@ -2273,29 +2464,66 @@ function initOICharts(tickerStr, tickerData) {{
   // Intra-week charts (same logic, keyed by expiry date)
   const iwEntries = tickerData.intraweek ?? [];
   iwEntries.forEach(entry => {{
-    const safeId  = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
-    const canvas  = document.getElementById(`oi-chart-${{safeId}}-iw-${{entry.expiry}}`);
-    if (!canvas) return;
+    const safeId   = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
+    const safeIwId = `${{safeId}}-iw-${{entry.expiry.replace(/[^0-9]/g, "")}}`;
 
     const contracts = (entry.contracts ?? []).filter(c => c && (c.open_interest ?? 0) > 0);
-    if (contracts.length === 0) return;
 
-    const top10  = [...contracts].sort((a, b) => b.open_interest - a.open_interest).slice(0, 10);
-    const strikes = [...new Set(top10.map(c => c.strike))].sort((a, b) => a - b);
-    const byStrike = {{}};
-    top10.forEach(c => {{
+    // Build strike map shared by OI and Vol charts
+    const allByStrikeIW = {{}};
+    contracts.forEach(c => {{
       const k = c.strike;
-      if (!byStrike[k]) byStrike[k] = {{ call:0, put:0, callVol:0, putVol:0, callSig:null, putSig:null }};
-      if (c.type === "Call") {{ byStrike[k].call=c.open_interest??0; byStrike[k].callVol=c.volume??0; byStrike[k].callSig=c.signal; }}
-      else                   {{ byStrike[k].put =c.open_interest??0; byStrike[k].putVol =c.volume??0; byStrike[k].putSig =c.signal; }}
+      if (!allByStrikeIW[k]) allByStrikeIW[k] = {{ call:0, put:0, callVol:0, putVol:0, callSig:null, putSig:null }};
+      if (c.type === "Call") {{ allByStrikeIW[k].call=c.open_interest??0; allByStrikeIW[k].callVol=c.volume??0; allByStrikeIW[k].callSig=c.signal; }}
+      else                   {{ allByStrikeIW[k].put =c.open_interest??0; allByStrikeIW[k].putVol =c.volume??0; allByStrikeIW[k].putSig =c.signal; }}
     }});
+    const iwStrikes = Object.entries(allByStrikeIW)
+      .sort(([, a], [, b]) => (b.call + b.put) - (a.call + a.put))
+      .slice(0, 10)
+      .map(([k]) => parseFloat(k))
+      .sort((a, b) => a - b);
+    const iwByStrike = {{}};
+    iwStrikes.forEach(k => {{ iwByStrike[k] = allByStrikeIW[k]; }});
 
-    const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
-    oiCharts[tickerStr].push(chart);
-    canvas.addEventListener("mouseleave", () => {{
-      const el = document.getElementById("oi-ext-tooltip");
-      if (el) el.style.opacity = "0";
-    }});
+    // OI chart
+    if (contracts.length > 0) {{
+      const canvas = document.getElementById(`oi-chart-${{safeIwId}}`);
+      if (canvas) {{
+        const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(iwStrikes, iwByStrike, currentPrice));
+        canvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "oi" }};
+        oiCharts[tickerStr].push(chart);
+        canvas.addEventListener("mouseleave", () => {{
+          const el = document.getElementById("oi-ext-tooltip");
+          if (el) el.style.opacity = "0";
+        }});
+      }}
+    }}
+
+    // Volume chart
+    const volCanvas = document.getElementById(`vol-chart-${{safeIwId}}`);
+    if (volCanvas) {{
+      const hasVol = contracts.some(c => (c.volume ?? 0) > 0);
+      if (hasVol) {{
+        const chart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(iwStrikes, iwByStrike, currentPrice));
+        volCanvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "vol" }};
+        oiCharts[tickerStr].push(chart);
+        volCanvas.addEventListener("mouseleave", () => {{
+          const el = document.getElementById("vol-ext-tooltip");
+          if (el) el.style.opacity = "0";
+        }});
+      }}
+    }}
+
+    // Momentum chart
+    const momCanvas = document.getElementById(`mom-chart-${{safeIwId}}`);
+    if (momCanvas) {{
+      const histArr = tickerData.expiry_history?.[entry.expiry] ?? [];
+      if (histArr.length >= 1) {{
+        momCanvas._momHistData = histArr;
+        const momChart = new Chart(momCanvas.getContext("2d"), buildMomentumChartConfig(histArr, false));
+        oiCharts[tickerStr].push(momChart);
+      }}
+    }}
   }});
 }}
 
@@ -2516,7 +2744,67 @@ document.getElementById("mom-modal").addEventListener("click", e => {{
   if (e.target === document.getElementById("mom-modal")) closeMomModal();
 }});
 document.addEventListener("keydown", e => {{
-  if (e.key === "Escape") closeMomModal();
+  if (e.key === "Escape") {{ closeMomModal(); closeBarModal(); }}
+}});
+
+// ---- Bar chart (OI / Volume) expand modal ----
+let _barModalChartOI  = null;
+let _barModalChartVol = null;
+
+function _applyModalOverrides(cfg) {{
+  try {{
+    cfg.options.scales.x.ticks = {{
+      display: true,
+      color: "#94a3b8",
+      font: {{ size: 11 }},
+      maxRotation: 40,
+      callback: v => `$${{v}}`,
+      maxTicksLimit: 16,
+    }};
+    cfg.options.scales.y.ticks.font = {{ size: 11 }};
+  }} catch(e) {{}}
+  try {{ cfg.data.datasets.forEach(ds => {{ ds.barThickness = 12; }}); }} catch(e) {{}}
+}}
+
+function openBarModal(oiCanvasId, volCanvasId, label) {{
+  const oiCanvas  = document.getElementById(oiCanvasId);
+  const volCanvas = document.getElementById(volCanvasId);
+
+  // Destroy any previous charts
+  if (_barModalChartOI)  {{ try {{ _barModalChartOI.destroy();  }} catch(e) {{}} _barModalChartOI  = null; }}
+  if (_barModalChartVol) {{ try {{ _barModalChartVol.destroy(); }} catch(e) {{}} _barModalChartVol = null; }}
+
+  document.getElementById("bar-modal-title").textContent = label || "";
+
+  // OI chart
+  if (oiCanvas && oiCanvas._barChartData?.strikes?.length) {{
+    const d = oiCanvas._barChartData;
+    const cfg = buildOIChartConfig(d.strikes, d.byStrike, d.currentPrice);
+    _applyModalOverrides(cfg);
+    _barModalChartOI = new Chart(document.getElementById("bar-modal-canvas-oi").getContext("2d"), cfg);
+  }}
+
+  // Volume chart
+  if (volCanvas && volCanvas._barChartData?.strikes?.length) {{
+    const d = volCanvas._barChartData;
+    const cfg = buildVolChartConfig(d.strikes, d.byStrike, d.currentPrice);
+    _applyModalOverrides(cfg);
+    _barModalChartVol = new Chart(document.getElementById("bar-modal-canvas-vol").getContext("2d"), cfg);
+  }}
+
+  document.getElementById("bar-modal").classList.add("open");
+  document.body.style.overflow = "hidden";
+}}
+
+function closeBarModal() {{
+  document.getElementById("bar-modal").classList.remove("open");
+  document.body.style.overflow = "";
+  if (_barModalChartOI)  {{ try {{ _barModalChartOI.destroy();  }} catch(e) {{}} _barModalChartOI  = null; }}
+  if (_barModalChartVol) {{ try {{ _barModalChartVol.destroy(); }} catch(e) {{}} _barModalChartVol = null; }}
+}}
+
+document.getElementById("bar-modal").addEventListener("click", e => {{
+  if (e.target === document.getElementById("bar-modal")) closeBarModal();
 }});
 
 // ---- Quick sort ----

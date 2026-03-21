@@ -47,8 +47,8 @@ _RANK_FILLS_3 = [
     PatternFill("solid", fgColor="EBF3FB"),
     PatternFill("solid", fgColor="F5F9FE"),
 ]
-# Extend to 10 ranks — ranks 4-10 use the lightest shade
-RANK_FILLS = _RANK_FILLS_3 + [_RANK_FILLS_3[-1]] * 7
+# Extend to 25 ranks — ranks 4+ use the lightest shade
+RANK_FILLS = _RANK_FILLS_3 + [_RANK_FILLS_3[-1]] * 22
 
 WHITE_FONT   = Font(color="FFFFFF", bold=True)
 BOLD_FONT    = Font(bold=True)
@@ -495,6 +495,22 @@ def main():
             for hd in ticker_data.get("horizons", {}).values()
             if hd.get("expiry")
         }
+        # Also include intra-week expiries so OI Momentum is tracked for them
+        for iw_entry in ticker_data.get("intraweek", []):
+            if iw_entry.get("expiry"):
+                expiries_needed.add(iw_entry["expiry"])
+
+        # Also proactively track the next 2 Fridays beyond the current "fri"
+        # horizon so that when they become the "7D" target they already have
+        # several days of accumulated history instead of starting cold.
+        fri_expiry = ticker_data.get("horizons", {}).get("fri", {}).get("expiry")
+        if fri_expiry:
+            from datetime import date as _date, timedelta as _td
+            fri_date = _date.fromisoformat(fri_expiry)
+            for extra_weeks in (1, 2):
+                lookahead = (fri_date + _td(weeks=extra_weeks)).isoformat()
+                if lookahead in chains:
+                    expiries_needed.add(lookahead)
 
         # Drop stale expiries (already past)
         strike_history[ticker] = {

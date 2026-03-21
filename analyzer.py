@@ -52,8 +52,10 @@ MAX_EXPIRY_BUFFER_DAYS = 10  # how far past target we'll look for a valid expiry
 
 def find_intraweek_expiries(expirations: list[str], today: date) -> list[str]:
     """
-    Returns Mon/Tue/Wed/Thu expiry dates strictly between today and the next Friday.
-    These intra-week expiries only exist on hyper-liquid stocks (AAPL, NVDA, TSLA…).
+    Returns Mon/Tue/Wed expiry dates strictly between today and the next end-of-week
+    expiry (Thu or Fri). These intra-week expiries only exist on hyper-liquid stocks.
+    Thursdays that are the week's final expiry (e.g. Good Friday holiday shift) are
+    excluded because they are already captured as the main weekly horizon.
     """
     friday = next_friday(today)
     result = []
@@ -62,7 +64,8 @@ def find_intraweek_expiries(expirations: list[str], today: date) -> list[str]:
             exp_date = date.fromisoformat(exp_str)
         except ValueError:
             continue
-        if today < exp_date < friday and exp_date.weekday() != 4:
+        # Include only Mon/Tue/Wed (weekday 0-2) that fall before this week's Friday
+        if today < exp_date < friday and exp_date.weekday() in (0, 1, 2):
             result.append(exp_str)
     result.sort()
     return result
@@ -70,45 +73,54 @@ def find_intraweek_expiries(expirations: list[str], today: date) -> list[str]:
 
 def find_nearest_expiry(expirations: list[str], target_date: date) -> Optional[str]:
     """
-    Returns the nearest Friday expiry date string that is >= target_date,
-    within MAX_EXPIRY_BUFFER_DAYS of target.
+    Returns the nearest end-of-week expiry date string closest to target_date.
 
-    Filters to Fridays only (weekday == 4) so that Mon/Wed intra-week expiries
-    available on hyper-liquid stocks (AAPL, NVDA, TSLA, etc.) are excluded.
-    Falls back to any Friday >= target if none found within the buffer.
-    Returns None if no Friday expiry exists at all.
+    Search order:
+      1. Thu/Fri in [target_date, target_date + MAX_EXPIRY_BUFFER_DAYS]  (prefer on/after)
+      2. Thu/Fri in [target_date - 7, target_date)  (allow slightly before — handles LEAPS
+         monthly expiries that fall a few days short of the exact N-day mark, e.g. 1Y)
+      3. Any Thu/Fri >= target_date with no distance limit  (true future fallback)
+
+    Accepts Thursday (weekday 3) OR Friday (weekday 4) to handle market holidays
+    where Friday options are shifted to the prior Thursday (e.g. Good Friday).
+    Mon/Tue/Wed intra-week expiries are excluded so horizon targets stay weekly.
+    Returns None if no valid expiry exists at all.
     """
-    cutoff = target_date + timedelta(days=MAX_EXPIRY_BUFFER_DAYS)
-    candidates = []
+    def _is_eow(d: date) -> bool:
+        """Thursday or Friday counts as end-of-week."""
+        return d.weekday() in (3, 4)
+
+    eow_expiries: list[tuple[date, str]] = []
     for exp_str in expirations:
         try:
             exp_date = date.fromisoformat(exp_str)
         except ValueError:
             continue
-        if exp_date.weekday() != 4:  # skip non-Fridays
-            continue
-        if target_date <= exp_date <= cutoff:
-            candidates.append((exp_date, exp_str))
+        if _is_eow(exp_date):
+            eow_expiries.append((exp_date, exp_str))
 
-    if not candidates:
-        # relax buffer: nearest Friday >= target, no distance limit
-        all_future = []
-        for exp_str in expirations:
-            try:
-                exp_date = date.fromisoformat(exp_str)
-            except ValueError:
-                continue
-            if exp_date.weekday() != 4:
-                continue
-            if exp_date >= target_date:
-                all_future.append((exp_date, exp_str))
-        if all_future:
-            all_future.sort()
-            return all_future[0][1]
-        return None
+    # 1. Prefer nearest Thu/Fri on or after target within forward buffer
+    cutoff = target_date + timedelta(days=MAX_EXPIRY_BUFFER_DAYS)
+    forward = [(d, s) for d, s in eow_expiries if target_date <= d <= cutoff]
+    if forward:
+        forward.sort()
+        return forward[0][1]
 
-    candidates.sort()
-    return candidates[0][1]
+    # 2. Allow slightly-before-target (up to 7 days) for LEAPS monthly expiries
+    pre_window = target_date - timedelta(days=7)
+    pre = [(d, s) for d, s in eow_expiries if pre_window <= d < target_date]
+    if pre:
+        # Pick the closest one (largest date, i.e. least negative offset)
+        pre.sort(reverse=True)
+        return pre[0][1]
+
+    # 3. Any future Thu/Fri, no distance limit
+    future = [(d, s) for d, s in eow_expiries if d >= target_date]
+    if future:
+        future.sort()
+        return future[0][1]
+
+    return None
 
 
 def classify_signal(opt_type: str, strike: float, current_price: float) -> str:
@@ -141,7 +153,18 @@ def top_contracts(
     df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0)
     df["volume"]       = pd.to_numeric(df["volume"],       errors="coerce").fillna(0)
     df = df[df["openInterest"] > 0].copy()
-    df = df.sort_values("openInterest", ascending=False).head(n)
+
+    # Rank by combined (call+put) OI per strike so both sides are always included.
+    # This prevents the chart from showing only one side of a strike when the
+    # other side ranked just outside the top-N individual contracts.
+    strike_total = df.groupby("strike")["openInterest"].sum().rename("strikeTotal")
+    df = df.join(strike_total, on="strike")
+    top_strikes = (
+        df[["strike", "strikeTotal"]].drop_duplicates()
+        .sort_values("strikeTotal", ascending=False)
+        .head(n)["strike"]
+    )
+    df = df[df["strike"].isin(top_strikes)]
 
     results = []
     for _, row in df.iterrows():
@@ -165,6 +188,9 @@ def top_contracts(
             "moneyness": moneyness,
             "forecast_pct": forecast_pct,
         })
+
+    # Sort by individual OI descending so rank rows (top-3) are correct.
+    results.sort(key=lambda x: x.get("open_interest") or 0, reverse=True)
 
     # Pad with N/A entries if fewer than n contracts with volume
     while len(results) < n:
