@@ -1068,7 +1068,7 @@ function fmt(v) {{
   if (v == null) return '<span class="pct na">N/A</span>';
   const cls = v > 0 ? "pos" : v < 0 ? "neg" : "";
   const sign = v > 0 ? "+" : "";
-  return `<span class="pct ${{cls}}">${{sign}}${{v.toFixed(2)}}%</span>`;
+  return `<span class="pct ${{cls}}">${{sign}}${{v.toFixed(2)}}% <span style="font-weight:400;font-size:9px;opacity:0.7">to strike</span></span>`;
 }}
 function fmtPrice(v) {{
   if (v == null) return '<span class="pct na">N/A</span>';
@@ -1327,7 +1327,6 @@ function buildDetailCellContent(ticker) {{
             ${{moneynessLabel}}
             ${{badge(c.signal)}}
             ${{fmt(c.forecast_pct)}}
-            ${{deltaBadge(c)}}
             ${{flipBadge(c)}}
             <span class="rank-vol">OI: ${{fmtOI(c.open_interest)}}${{fmtVol(c.volume)}}</span>
           </div>
