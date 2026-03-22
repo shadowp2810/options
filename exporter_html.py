@@ -1786,7 +1786,7 @@ const oiCharts = {{}}; // ticker -> [Chart, ...]
 // Uses a LINEAR x-axis so strike spacing is proportional to real price distance
 // (e.g. 260→262.5 is visually narrower than 260→265).
 // Bar width is computed dynamically after layout so bars fill their slot.
-function _makeBarPlugins(pluginId, strikes, currentPrice) {{
+function _makeBarPlugins(pluginId, strikes, currentPrice, xRange=null) {{
   const priceLinePlugin = {{
     id: pluginId,
     beforeDraw(chart) {{
@@ -1806,27 +1806,41 @@ function _makeBarPlugins(pluginId, strikes, currentPrice) {{
       ctx.restore();
     }}
   }};
-  // Force the x-axis to span exactly the data range (no "nice" rounding padding).
-  // We do this in beforeUpdate so it is applied on every chart update cycle
-  // before the scale recomputes its limits.
+  // Force the x-axis to span exactly the data range. When xRange is provided
+  // (shared across OI + Vol charts for alignment), use that; otherwise derive
+  // bounds from the local strikes array.
   const xBoundsPlugin = {{
     id: pluginId + "_xb",
     beforeUpdate(chart) {{
       if (strikes.length < 2) return;
       const so = chart.options.scales.x;
-      const gL = strikes[1] - strikes[0];
-      const gR = strikes[strikes.length-1] - strikes[strikes.length-2];
-      so.min = strikes[0] - gL * 0.6;
-      so.max = strikes[strikes.length-1] + gR * 0.6;
+      if (xRange) {{
+        so.min = xRange.min;
+        so.max = xRange.max;
+      }} else {{
+        const gL = strikes[1] - strikes[0];
+        const gR = strikes[strikes.length-1] - strikes[strikes.length-2];
+        so.min = strikes[0] - gL * 0.6;
+        so.max = strikes[strikes.length-1] + gR * 0.6;
+      }}
     }}
   }};
   return [priceLinePlugin, xBoundsPlugin];
 }}
 
-function buildOIChartConfig(strikes, byStrike, currentPrice) {{
+// Compute a shared x-axis range from two strike arrays so OI and Vol charts align.
+function sharedXRange(strikesA, strikesB) {{
+  const all = [...strikesA, ...strikesB].sort((a, b) => a - b);
+  if (all.length < 2) return null;
+  const gL = all[1] - all[0];
+  const gR = all[all.length-1] - all[all.length-2];
+  return {{ min: all[0] - gL * 0.6, max: all[all.length-1] + gR * 0.6 }};
+}}
+
+function buildOIChartConfig(strikes, byStrike, currentPrice, xRange=null) {{
   return {{
     type: "bar",
-    plugins: _makeBarPlugins("priceLineOI", strikes, currentPrice),
+    plugins: _makeBarPlugins("priceLineOI", strikes, currentPrice, xRange),
     data: {{
       datasets: [
         {{
@@ -1942,10 +1956,10 @@ function buildOIChartConfig(strikes, byStrike, currentPrice) {{
 // ─────────────────────────────────────────────────────────────────────────────
 // Volume bar chart — same structure as OI chart but uses today's volume data.
 // byStrike[s] = {{ call: callVol, put: putVol, callOI, putOI, callSig, putSig }}
-function buildVolChartConfig(strikes, byStrike, currentPrice) {{
+function buildVolChartConfig(strikes, byStrike, currentPrice, xRange=null) {{
   return {{
     type: "bar",
-    plugins: _makeBarPlugins("priceLineVol", strikes, currentPrice),
+    plugins: _makeBarPlugins("priceLineVol", strikes, currentPrice, xRange),
     data: {{
       datasets: [
         {{
@@ -2434,8 +2448,16 @@ function initOICharts(tickerStr, tickerData) {{
         const volStrikes = volStrikesTop;
         const byStrikeVol = {{}};
         volStrikes.forEach(k => {{ byStrikeVol[k] = allByStrikeVol[k]; }});
-        const volChart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(volStrikes, byStrikeVol, currentPrice));
-        volCanvas._barChartData = {{ strikes: volStrikes, byStrike: byStrikeVol, currentPrice, type: "vol" }};
+
+        // Shared x-axis range so OI and Vol charts are aligned
+        const xr = sharedXRange(strikes, volStrikes);
+        // Rebuild OI chart with shared range
+        oiCharts[tickerStr].pop()?.destroy?.();  // remove last-added (OI chart)
+        oiCharts[tickerStr].push(new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice, xr)));
+        canvas._barChartData = {{ strikes, byStrike, currentPrice, type: "oi", sharedXRange: xr }};
+
+        const volChart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(volStrikes, byStrikeVol, currentPrice, xr));
+        volCanvas._barChartData = {{ strikes: volStrikes, byStrike: byStrikeVol, currentPrice, type: "vol", sharedXRange: xr }};
         oiCharts[tickerStr].push(volChart);
         volCanvas.addEventListener("mouseleave", () => {{
           const el = document.getElementById("vol-ext-tooltip");
@@ -2485,12 +2507,14 @@ function initOICharts(tickerStr, tickerData) {{
     const iwByStrike = {{}};
     iwStrikes.forEach(k => {{ iwByStrike[k] = allByStrikeIW[k]; }});
 
+    const iwXr = sharedXRange(iwStrikes, iwStrikes);
+
     // OI chart
     if (contracts.length > 0) {{
       const canvas = document.getElementById(`oi-chart-${{safeIwId}}`);
       if (canvas) {{
-        const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(iwStrikes, iwByStrike, currentPrice));
-        canvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "oi" }};
+        const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(iwStrikes, iwByStrike, currentPrice, iwXr));
+        canvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "oi", sharedXRange: iwXr }};
         oiCharts[tickerStr].push(chart);
         canvas.addEventListener("mouseleave", () => {{
           const el = document.getElementById("oi-ext-tooltip");
@@ -2504,8 +2528,8 @@ function initOICharts(tickerStr, tickerData) {{
     if (volCanvas) {{
       const hasVol = contracts.some(c => (c.volume ?? 0) > 0);
       if (hasVol) {{
-        const chart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(iwStrikes, iwByStrike, currentPrice));
-        volCanvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "vol" }};
+        const chart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(iwStrikes, iwByStrike, currentPrice, iwXr));
+        volCanvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "vol", sharedXRange: iwXr }};
         oiCharts[tickerStr].push(chart);
         volCanvas.addEventListener("mouseleave", () => {{
           const el = document.getElementById("vol-ext-tooltip");
@@ -2776,18 +2800,23 @@ function openBarModal(oiCanvasId, volCanvasId, label) {{
 
   document.getElementById("bar-modal-title").textContent = label || "";
 
+  // Compute shared x range for the modal so both charts align
+  const oiD   = oiCanvas?._barChartData;
+  const volD  = volCanvas?._barChartData;
+  const modalXr = (oiD?.strikes?.length && volD?.strikes?.length)
+    ? sharedXRange(oiD.strikes, volD.strikes)
+    : (oiD?.sharedXRange ?? volD?.sharedXRange ?? null);
+
   // OI chart
-  if (oiCanvas && oiCanvas._barChartData?.strikes?.length) {{
-    const d = oiCanvas._barChartData;
-    const cfg = buildOIChartConfig(d.strikes, d.byStrike, d.currentPrice);
+  if (oiD?.strikes?.length) {{
+    const cfg = buildOIChartConfig(oiD.strikes, oiD.byStrike, oiD.currentPrice, modalXr);
     _applyModalOverrides(cfg);
     _barModalChartOI = new Chart(document.getElementById("bar-modal-canvas-oi").getContext("2d"), cfg);
   }}
 
   // Volume chart
-  if (volCanvas && volCanvas._barChartData?.strikes?.length) {{
-    const d = volCanvas._barChartData;
-    const cfg = buildVolChartConfig(d.strikes, d.byStrike, d.currentPrice);
+  if (volD?.strikes?.length) {{
+    const cfg = buildVolChartConfig(volD.strikes, volD.byStrike, volD.currentPrice, modalXr);
     _applyModalOverrides(cfg);
     _barModalChartVol = new Chart(document.getElementById("bar-modal-canvas-vol").getContext("2d"), cfg);
   }}
