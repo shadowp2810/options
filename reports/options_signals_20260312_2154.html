@@ -1464,19 +1464,17 @@ function buildDetailCellContent(ticker) {
     const rightCol = momentumHtml
       ? `<div class="horizon-block-right">${momentumHtml}</div>`
       : "";
-    const bodyContent = rightCol
-      ? `<div class="horizon-block-body">
-          <div class="horizon-block-left">
-            <div class="col-section-label">Open Interest</div>
-            ${rankRows}${chartHtml}
-          </div>
-          <div class="horizon-block-middle">
-            <div class="col-section-label">${VOLUME_LABEL}</div>
-            ${volRankRows}${volChartHtml}
-          </div>
-          ${rightCol}
-        </div>`
-      : `<div class="col-section-label">Open Interest</div>${rankRows}${chartHtml}`;
+    const bodyContent = `<div class="horizon-block-body">
+        <div class="horizon-block-left">
+          <div class="col-section-label">Open Interest</div>
+          ${rankRows}${chartHtml}
+        </div>
+        <div class="horizon-block-middle">
+          <div class="col-section-label">${VOLUME_LABEL}</div>
+          ${volRankRows}${volChartHtml}
+        </div>
+        ${rightCol}
+      </div>`;
 
     const hasBarCharts = contracts.length > 0 || contractsByVol.some(c => (c.volume ?? 0) > 0);
     const barExpandBtn = hasBarCharts
