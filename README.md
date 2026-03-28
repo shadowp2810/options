@@ -16,7 +16,9 @@ Every weekday at 4:30 PM ET (after market close), the tool automatically:
 4. Classifies each contract as **BUY, SELL, HEDGE-C, or HEDGE-P** based on moneyness
 5. Calculates forecasted % move implied by where the money is positioned
 6. Computes **OI trend signals** (call OI vs put OI changes vs prior snapshot) to show market sentiment shifts
-7. Generates an interactive HTML dashboard, pushes it live to GitHub Pages, and **archives every day's report**
+7. Computes **Max Pain** (the strike price where option sellers profit most at expiry) and the **Put/Call OI Ratio** for every horizon
+8. Computes the **Implied Move** — the market's expected ±% price move by each expiry, derived from ATM straddle bid/ask prices
+8. Generates an interactive HTML dashboard, pushes it live to GitHub Pages, and **archives every day's report**
 
 ---
 
@@ -98,6 +100,87 @@ Shorter-dated options move daily and react to near-term catalysts, so yesterday 
 
 ---
 
+## Predictive Signals (Phase 1)
+
+The dashboard goes beyond showing where OI is concentrated — it also computes signals that have actual predictive value for where the stock price is likely to move.
+
+### Max Pain
+
+**What it is:** At any expiry date, if you could hypothetically freeze the stock price at each strike and calculate the total payout owed to all option *buyers*, you'd get a "pain" value per strike. The strike that *minimises* that total payout is Max Pain — it's the price at which option *sellers* (mostly market makers) collect the most premium.
+
+**Formula:**
+```
+Pain at price K = Σ call_OI × max(0, K − strike)   [ITM calls pay out]
+               + Σ put_OI  × max(0, strike − K)    [ITM puts pay out]
+
+Max Pain = the strike K that minimises this sum
+```
+
+**Why it matters:** Market makers are on the short side of most options. As expiry approaches they can influence price slightly via their delta-hedging activity. Empirically, stock prices tend to drift toward Max Pain in the final 1–2 days before expiry — it is sometimes called "options pinning."
+
+**How to read it:**
+- `MP $195 ▼2.1%` — Max Pain is $195, which is 2.1% *below* the current price (bearish gravitational pull toward expiry)
+- `MP $215 ▲1.8%` — Max Pain is above current price (upward drift expected into expiry)
+- The violet dashed line on the **Top OI by Strike** chart marks the Max Pain level. The yellow dashed line is the current price. When they're far apart, there's a strong directional gravity. When they're close, the stock is already near its "equilibrium."
+
+**Reliability:** Strongest for weekly (This Friday) expiries with high OI. For 6-month or 1-year horizons it is weak — too much time remains for positions to shift.
+
+---
+
+### Put/Call Ratio (PCR)
+
+**What it is:** `Total Put OI ÷ Total Call OI` for a given expiry. It summarises the overall sentiment tilt of the entire options chain.
+
+| PCR | Color | What it signals |
+|---|---|---|
+| < 0.7 | Green | More call bets than put bets — bullish sentiment |
+| 0.7 – 1.2 | Yellow | Roughly balanced — neutral |
+| > 1.2 | Red | More put bets — bearish sentiment, or heavy hedging |
+
+**The contrarian read:** Extremely high PCR (> 2.0) can be a *contrarian bullish* signal. When everyone has already bought puts, the downside is priced in — there's less fuel for further selling and a short squeeze becomes more likely. SPY typically runs PCR of 1.5–2.0 even in normal markets because institutions constantly buy puts as portfolio insurance. That's hedging, not fear.
+
+**How to read it in the dashboard:** The `PCR X.XX` badge appears in each horizon block header. Green = more calls = bullish lean, Red = more puts = bearish/hedged lean.
+
+### Implied Move (IM)
+
+**What it is:** The cheapest way to bet on a stock moving *in either direction* is to buy the ATM call and ATM put at the same time (a **straddle**). The combined price of that straddle tells you exactly what the market thinks the stock will move by expiry — if traders expected a bigger move, they'd bid the straddle price higher until it was fair.
+
+**Formula:**
+```
+Implied Move % = (ATM call mid-price + ATM put mid-price) / stock price × 100
+
+where mid-price = (bid + ask) / 2
+```
+
+**Example:** NVDA is at $114. The April 4 ATM call mid = $3.30, ATM put mid = $3.20.
+```
+IM = ($3.30 + $3.20) / $114 × 100 = ±5.6%
+```
+The market is saying: *"We expect NVDA to move roughly ±$6.40 between now and April 4."* It does not say which direction — just the magnitude.
+
+**How to read it:**
+
+| Badge | What it means |
+|---|---|
+| `IM ±2%` | Quiet week expected — market is calm |
+| `IM ±5–8%` | Meaningful move expected — watch for catalysts |
+| `IM ±10–15%` | Large move priced in — likely earnings or major event nearby |
+| `IM ±20%+` | Extreme uncertainty — very long dated or major risk event |
+
+**Typical ranges by stock type:**
+
+| Stock | Weekly IM | Earnings week IM |
+|---|---|---|
+| SPY / QQQ (ETFs) | 0.5%–2% | N/A |
+| AAPL / MSFT | 2%–4% | 5%–8% |
+| NVDA / TSLA | 4%–8% | 10%–18% |
+
+**Why it's useful:** Implied Move is forward-looking and priced by the actual market — it reflects *all* available information including pending earnings, macro events, and general fear/greed. A widening IM mid-week (even without a news catalyst) often signals that someone knows something is coming.
+
+**How you'll spot an error:** IM should always be positive. For a typical weekly expiry it should fall in the ranges above. If you see `IM ±0.1%` or `IM ±50%` on a normal stock, something is wrong with the bid/ask data (e.g. stale quotes or a very illiquid strike was chosen as ATM).
+
+---
+
 ## Dashboard Walkthrough
 
 ### Header Bar
@@ -139,12 +222,17 @@ Each row shows the top contract's signal and forecasted % for the currently sele
   - 180D and 1Y horizons are omitted from the trend bar (OI trends at those durations are too slow to be meaningful day-to-day)
   - Hovering a pill shows the exact % change and the comparison window used
 - **8 horizon blocks** (This Friday → 1 Year) arranged in a **4-column grid** (row 1: Fri / 7D / 30D / 45D, row 2: 60D / 90D / 180D / 1Y), each showing:
+  - **Header badges** (top-right of each block, left to right):
+    - `IM ±X.X%` (amber) — Implied Move: the market's expected ±move magnitude by expiry
+    - `MP $XXX ▲/▼X.X%` (violet) — Max Pain strike and its distance from current price
+    - `PCR X.XX` (color-coded green/yellow/red) — Put/Call OI Ratio for that expiry
   - Top 3 contracts by OI with signal, forecast %, OI count, volume, and delta badges
   - Earnings-in-window flag (⚠) with exact date if earnings falls before expiry
   - **Stacked bar chart** (calls = green, puts = red) for top 10 contracts by OI:
     - X-axis uses **proportional spacing** — strikes further apart appear further apart visually
     - A **dashed amber line** marks the current stock price (OTM/ITM boundary at a glance)
-    - Hover any bar for OI, volume, and signal details
+    - A **dashed violet line** marks the Max Pain strike (where price gravitates at expiry)
+    - Hover any bar for OI, volume, signal details, and both the current price and Max Pain
   - **OI Momentum chart** — a line chart showing day-by-day OI progression for the top 8 strikes over the past week (calls = solid green lines, puts = dashed red lines). Each line is labelled at its last data point (e.g. `$220 C`). This reveals *rising stars* — strikes rapidly accumulating new OI mid-week that may soon overtake the current leader. A **⤢ Expand** button opens it near-fullscreen for a closer look.
 - **Intra-week Expiries** — for hyper-liquid stocks (TSLA, AAPL, etc.) that have Mon/Tue/Wed/Thu expiries, these appear as a separate swipeable section with the same layout
 
@@ -246,6 +334,9 @@ analyzer.py
       derive combo signal (Build-Up / Unwinding checked first, then
         Bullish / Bearish / Hedged Rally / Short Covering)
       compare contracts vs yesterday's → strike delta + signal flip
+      compute Max Pain (strike minimising total option buyer payout)
+      compute Put/Call OI Ratio (PCR)
+      compute Implied Move (ATM straddle mid / stock price)
 
 main.py
   → for each ticker × distinct expiry:
@@ -292,7 +383,7 @@ GitHub Actions (free tier, cloud)
 |---|---|---|
 | Stock price | Yahoo Finance (yfinance) | ~15 min delayed |
 | Price history (1D, 5D) | Yahoo Finance | Used for OI trend signal direction |
-| Options chain, OI, Volume | NASDAQ public API | OI is always previous-day close |
+| Options chain, OI, Volume, Bid/Ask | NASDAQ public API | OI is always previous-day close; bid/ask are live during market hours |
 | Earnings dates | Yahoo Finance | Best-effort; may occasionally be off by a day |
 | Company name / sector | Yahoo Finance | Used in expanded view |
 
@@ -324,3 +415,8 @@ GitHub Actions (free tier, cloud)
 | **Smart money** | Institutional investors (hedge funds, banks) whose large positions show up as high OI |
 | **OI Trend** | Change in total call or put OI vs a prior snapshot — used to detect new positioning |
 | **Combo signal** | Derived from (call OI trend) + (put OI trend) + (price direction) — e.g. Bullish, Bearish, Hedged Rally |
+| **Implied Move (IM)** | The market's expected ±% price move by expiry, derived from the ATM straddle price (call mid + put mid) divided by stock price. Does not predict direction — only magnitude. |
+| **Straddle** | Buying an ATM call and ATM put simultaneously. The combined cost is the market's best estimate of how much the stock will move. |
+| **Max Pain** | The strike price where the total payout to option buyers is minimised — where option sellers profit most. Price tends to gravitate here near expiry. |
+| **PCR (Put/Call Ratio)** | Total Put OI ÷ Total Call OI. Below 0.7 = bullish lean, above 1.2 = bearish/hedged lean |
+| **Options pinning** | The tendency for a stock to close near a high-OI strike on expiry day, driven by market maker delta-hedging activity |

@@ -123,6 +123,97 @@ def find_nearest_expiry(expirations: list[str], target_date: date) -> Optional[s
     return None
 
 
+def compute_max_pain(chain_df: pd.DataFrame) -> Optional[float]:
+    """
+    Returns the Max Pain strike: the price at which option buyers collectively
+    lose the most. At each candidate strike we compute the total dollar-value
+    payout the options would have if the stock closed exactly there, then pick
+    the strike that *minimizes* that total payout (i.e. sellers profit most).
+
+    Formula per candidate K:
+      pain = Σ call_OI × max(0, K - strike)   # ITM calls pay out
+           + Σ put_OI  × max(0, strike - K)   # ITM puts pay out
+    """
+    df = chain_df.copy()
+    df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0)
+    df = df[df["openInterest"] > 0]
+    if df.empty:
+        return None
+
+    calls = df[df["type"].str.lower() == "call"][["strike", "openInterest"]].copy()
+    puts  = df[df["type"].str.lower() == "put"][["strike", "openInterest"]].copy()
+    all_strikes = sorted(df["strike"].unique())
+
+    if len(all_strikes) < 3:
+        return None
+
+    min_pain: float = float("inf")
+    max_pain_strike: Optional[float] = None
+
+    for candidate in all_strikes:
+        call_pain = float(((candidate - calls["strike"]).clip(lower=0) * calls["openInterest"]).sum())
+        put_pain  = float(((puts["strike"] - candidate).clip(lower=0) * puts["openInterest"]).sum())
+        total = call_pain + put_pain
+        if total < min_pain:
+            min_pain = total
+            max_pain_strike = candidate
+
+    return max_pain_strike
+
+
+def compute_implied_move(chain_df: pd.DataFrame, current_price: float) -> Optional[float]:
+    """
+    Returns the market's expected ±move magnitude as a percentage, derived from
+    the ATM straddle price (nearest-ATM call mid + nearest-ATM put mid).
+
+    Formula:
+        implied_move_pct = (call_mid + put_mid) / current_price * 100
+        where mid = (bid + ask) / 2
+
+    Returns None if bid/ask data is unavailable or the chain is too sparse.
+    """
+    if current_price is None or current_price <= 0:
+        return None
+
+    df = chain_df.copy()
+    # Need valid bid/ask columns — if missing or all-zero the API didn't return them
+    if "bid" not in df.columns or "ask" not in df.columns:
+        return None
+    df["bid"] = pd.to_numeric(df["bid"], errors="coerce").fillna(0.0)
+    df["ask"] = pd.to_numeric(df["ask"], errors="coerce").fillna(0.0)
+    df["mid"] = (df["bid"] + df["ask"]) / 2
+
+    # Find the strike closest to current price that has valid mid prices for both sides
+    calls = df[df["type"].str.lower() == "call"][["strike", "mid", "bid", "ask"]].copy()
+    puts  = df[df["type"].str.lower() == "put"][["strike",  "mid", "bid", "ask"]].copy()
+
+    if calls.empty or puts.empty:
+        return None
+
+    # Filter to strikes that have a real market (bid > 0, ask > bid)
+    calls = calls[(calls["bid"] > 0) & (calls["ask"] > calls["bid"])]
+    puts  = puts[(puts["bid"]  > 0) & (puts["ask"]  > puts["bid"])]
+
+    if calls.empty or puts.empty:
+        return None
+
+    # Pick the strike nearest ATM that exists in both calls and puts
+    common_strikes = set(calls["strike"].unique()) & set(puts["strike"].unique())
+    if not common_strikes:
+        return None
+
+    atm_strike = min(common_strikes, key=lambda s: abs(s - current_price))
+
+    call_mid = float(calls.loc[calls["strike"] == atm_strike, "mid"].iloc[0])
+    put_mid  = float(puts.loc[puts["strike"]   == atm_strike, "mid"].iloc[0])
+
+    straddle = call_mid + put_mid
+    if straddle <= 0:
+        return None
+
+    return round(straddle / current_price * 100, 1)
+
+
 def classify_signal(opt_type: str, strike: float, current_price: float) -> str:
     """
     Returns the directional signal for a contract:
@@ -280,6 +371,9 @@ def analyze_ticker(
             contracts = [dict(empty_contract)] * TOP_N
             total_call_oi = 0
             total_put_oi  = 0
+            max_pain: Optional[float]        = None
+            pcr: Optional[float]             = None
+            implied_move_pct: Optional[float] = None
         else:
             contracts = top_contracts(chains[expiry], price)
             # Compute total call/put OI across ALL contracts in this expiry — much
@@ -293,6 +387,9 @@ def analyze_ticker(
                 chain_df.loc[chain_df["type"].str.lower() == "put", "openInterest"]
                 .pipe(pd.to_numeric, errors="coerce").fillna(0).sum()
             )
+            max_pain = compute_max_pain(chain_df)
+            pcr = round(total_put_oi / total_call_oi, 2) if total_call_oi > 0 else None
+            implied_move_pct = compute_implied_move(chain_df, price)
 
         # Attach delta vs previous run
         prev_contracts = []
@@ -405,17 +502,35 @@ def analyze_ticker(
             "call_oi_pct":   call_oi_pct,
             "put_oi_pct":    put_oi_pct,
             "combo_signal":  combo_signal,
+            "max_pain":          max_pain,
+            "pcr":               pcr,
+            "implied_move_pct":  implied_move_pct,
         }
 
     # Intra-week expiries (Mon–Thu) for hyper-liquid stocks
     for exp_str in find_intraweek_expiries(expirations, today):
         if exp_str in chains:
-            iw_contracts = top_contracts(chains[exp_str], price)
+            iw_chain = chains[exp_str]
+            iw_contracts = top_contracts(iw_chain, price)
+            iw_total_call_oi = int(
+                iw_chain.loc[iw_chain["type"].str.lower() == "call", "openInterest"]
+                .pipe(pd.to_numeric, errors="coerce").fillna(0).sum()
+            )
+            iw_total_put_oi = int(
+                iw_chain.loc[iw_chain["type"].str.lower() == "put", "openInterest"]
+                .pipe(pd.to_numeric, errors="coerce").fillna(0).sum()
+            )
+            iw_max_pain = compute_max_pain(iw_chain)
+            iw_pcr = round(iw_total_put_oi / iw_total_call_oi, 2) if iw_total_call_oi > 0 else None
+            iw_implied_move_pct = compute_implied_move(iw_chain, price)
             exp_date = date.fromisoformat(exp_str)
             result["intraweek"].append({
                 "expiry": exp_str,
                 "day": exp_date.strftime("%A"),
                 "contracts": iw_contracts,
+                "max_pain": iw_max_pain,
+                "pcr": iw_pcr,
+                "implied_move_pct": iw_implied_move_pct,
             })
 
     return result

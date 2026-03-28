@@ -148,9 +148,9 @@ def get_options_chain_nasdaq(
         except ValueError:
             continue
 
-        for side, oi_key, vol_key, last_key in (
-            ("call", "c_Openinterest", "c_Volume", "c_Last"),
-            ("put",  "p_Openinterest", "p_Volume", "p_Last"),
+        for side, oi_key, vol_key, last_key, bid_key, ask_key in (
+            ("call", "c_Openinterest", "c_Volume", "c_Last", "c_Bid", "c_Ask"),
+            ("put",  "p_Openinterest", "p_Volume", "p_Last", "p_Bid", "p_Ask"),
         ):
             raw.setdefault(current_expiry, []).append({
                 "strike":       strike,
@@ -158,6 +158,8 @@ def get_options_chain_nasdaq(
                 "volume":       int(_parse_num(row.get(vol_key))),
                 "openInterest": int(_parse_num(row.get(oi_key))),
                 "lastPrice":    _parse_num(row.get(last_key)),
+                "bid":          _parse_num(row.get(bid_key)),
+                "ask":          _parse_num(row.get(ask_key)),
             })
 
     if not raw:
@@ -169,6 +171,8 @@ def get_options_chain_nasdaq(
         df = pd.DataFrame(contracts)
         df["volume"]       = pd.to_numeric(df["volume"],       errors="coerce").fillna(0).astype(int)
         df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0).astype(int)
+        df["bid"]          = pd.to_numeric(df["bid"],          errors="coerce").fillna(0.0)
+        df["ask"]          = pd.to_numeric(df["ask"],          errors="coerce").fillna(0.0)
         chain_dict[exp] = df
 
     expirations = sorted(chain_dict.keys())

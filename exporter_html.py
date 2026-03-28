@@ -520,6 +520,21 @@ def write_html(
     align-items: center;
   }}
   .horizon-block-header .expiry {{ font-size: 10px; color: var(--text-dim); font-weight: 400; }}
+  .mp-badge {{
+    font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px;
+    background: rgba(167,139,250,0.12); border: 1px solid rgba(167,139,250,0.25);
+    white-space: nowrap; cursor: default;
+  }}
+  .pcr-badge {{
+    font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px;
+    background: rgba(148,163,184,0.08); border: 1px solid rgba(148,163,184,0.18);
+    white-space: nowrap; cursor: default;
+  }}
+  .im-badge {{
+    font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px;
+    background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.25);
+    color: #fbbf24; white-space: nowrap; cursor: default;
+  }}
   .rank-row {{
     display: flex;
     align-items: flex-start;
@@ -1444,6 +1459,26 @@ function buildDetailCellContent(ticker) {{
     const expiry = hData ? hData.expiry : null;
     const earningsInWin = hData ? hData.earnings_in_window : false;
     const contracts = hData ? hData.contracts : [];
+    const maxPain = hData?.max_pain ?? null;
+    const pcr = hData?.pcr ?? null;
+    // Max Pain badge — violet, shows distance from current price
+    const mpBadge = (maxPain != null && ticker.price != null) ? (() => {{
+      const diff = (maxPain - ticker.price) / ticker.price * 100;
+      const dir  = diff > 0.05 ? "▲" : diff < -0.05 ? "▼" : "→";
+      const col  = diff > 0.05 ? "var(--green)" : diff < -0.05 ? "var(--red)" : "var(--text-muted)";
+      return `<span class="mp-badge" style="color:${{col}}" title="Max Pain ${{maxPain}} — price tends to gravitate here at expiry">MP $${{maxPain}} ${{dir}}${{Math.abs(diff).toFixed(1)}}%</span>`;
+    }})() : "";
+    // Put/Call OI Ratio badge — green <0.7, yellow 0.7-1.2, red >1.2
+    const pcrBadge = pcr != null ? (() => {{
+      const col = pcr < 0.7 ? "var(--green)" : pcr > 1.2 ? "var(--red)" : "var(--yellow)";
+      const lbl = pcr < 0.7 ? "bullish" : pcr > 1.2 ? "bearish" : "neutral";
+      return `<span class="pcr-badge" style="color:${{col}}" title="Put/Call OI Ratio: ${{lbl}}. Below 0.7 = more calls (bullish), above 1.2 = more puts (bearish)">PCR ${{pcr.toFixed(2)}}</span>`;
+    }})() : "";
+    // Implied Move badge — amber, from ATM straddle mid-price
+    const impliedMove = hData?.implied_move_pct ?? null;
+    const imBadge = impliedMove != null
+      ? `<span class="im-badge" title="Implied Move: market expects ±${{impliedMove.toFixed(1)}}% by expiry (ATM straddle price / stock price)">IM ±${{impliedMove.toFixed(1)}}%</span>`
+      : "";
     const rankClasses = ["r1", "r2", "r3"];
     // Show top 3 in rank rows; all 10 are available for the chart below
     const rankRows = contracts.slice(0, 3).map((c, i) => {{
@@ -1541,7 +1576,7 @@ function buildDetailCellContent(ticker) {{
     return `<div class="horizon-block">
       <div class="horizon-block-header">
         <span>${{HORIZON_LABELS[h]}} ${{earningsBadge(earningsInWin, ticker.earnings_date)}}</span>
-        <div style="display:flex;align-items:center;gap:8px">${{barExpandBtn}}<span class="expiry">${{expiry ?? "N/A"}}</span></div>
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end">${{imBadge}}${{mpBadge}}${{pcrBadge}}${{barExpandBtn}}<span class="expiry">${{expiry ?? "N/A"}}</span></div>
       </div>
       ${{bodyContent}}
     </div>`;
@@ -1654,6 +1689,23 @@ function buildDetailCellContent(ticker) {{
             </div>
           </div>`;
 
+      const iwMaxPain = entry.max_pain ?? null;
+      const iwPcr = entry.pcr ?? null;
+      const iwMpBadge = (iwMaxPain != null && ticker.price != null) ? (() => {{
+        const diff = (iwMaxPain - ticker.price) / ticker.price * 100;
+        const dir  = diff > 0.05 ? "▲" : diff < -0.05 ? "▼" : "→";
+        const col  = diff > 0.05 ? "var(--green)" : diff < -0.05 ? "var(--red)" : "var(--text-muted)";
+        return `<span class="mp-badge" style="color:${{col}}" title="Max Pain ${{iwMaxPain}}">MP $${{iwMaxPain}} ${{dir}}${{Math.abs(diff).toFixed(1)}}%</span>`;
+      }})() : "";
+      const iwPcrBadge = iwPcr != null ? (() => {{
+        const col = iwPcr < 0.7 ? "var(--green)" : iwPcr > 1.2 ? "var(--red)" : "var(--yellow)";
+        const lbl = iwPcr < 0.7 ? "bullish" : iwPcr > 1.2 ? "bearish" : "neutral";
+        return `<span class="pcr-badge" style="color:${{col}}" title="Put/Call OI Ratio: ${{lbl}}">PCR ${{iwPcr.toFixed(2)}}</span>`;
+      }})() : "";
+      const iwImpliedMove = entry.implied_move_pct ?? null;
+      const iwImBadge = iwImpliedMove != null
+        ? `<span class="im-badge" title="Implied Move ±${{iwImpliedMove.toFixed(1)}}%">IM ±${{iwImpliedMove.toFixed(1)}}%</span>`
+        : "";
       const iwHasBarCharts = entry.contracts.length > 0 || iwContractsByVol.some(c => (c.volume ?? 0) > 0);
       const iwBarExpandBtn = iwHasBarCharts
         ? `<button class="bar-expand-btn" onclick="openBarModal('${{iwChartId}}','${{iwVolChartId}}','${{ticker.ticker}} · ${{entry.expiry}}')">⤢</button>`
@@ -1661,7 +1713,7 @@ function buildDetailCellContent(ticker) {{
       return `<div class="horizon-block">
         <div class="horizon-block-header">
           <span>${{entry.day}}</span>
-          <div style="display:flex;align-items:center;gap:8px">${{iwBarExpandBtn}}<span class="expiry">${{entry.expiry}}</span></div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end">${{iwImBadge}}${{iwMpBadge}}${{iwPcrBadge}}${{iwBarExpandBtn}}<span class="expiry">${{entry.expiry}}</span></div>
         </div>
         ${{iwBodyContent}}
       </div>`;
@@ -1784,23 +1836,40 @@ const oiCharts = {{}}; // ticker -> [Chart, ...]
 // Uses a LINEAR x-axis so strike spacing is proportional to real price distance
 // (e.g. 260→262.5 is visually narrower than 260→265).
 // Bar width is computed dynamically after layout so bars fill their slot.
-function _makeBarPlugins(pluginId, strikes, currentPrice, xRange=null) {{
+function _makeBarPlugins(pluginId, strikes, currentPrice, xRange=null, maxPain=null) {{
   const priceLinePlugin = {{
     id: pluginId,
     beforeDraw(chart) {{
       const xScale = chart.scales.x;
-      if (!xScale || currentPrice == null) return;
-      const xPx = xScale.getPixelForValue(currentPrice);
-      if (xPx < xScale.left || xPx > xScale.right) return;
+      if (!xScale) return;
       const ctx = chart.ctx;
       ctx.save();
-      ctx.beginPath();
-      ctx.setLineDash([4, 3]);
-      ctx.strokeStyle = "rgba(250,204,21,0.7)";
-      ctx.lineWidth = 1.5;
-      ctx.moveTo(xPx, chart.chartArea.top);
-      ctx.lineTo(xPx, chart.chartArea.bottom);
-      ctx.stroke();
+      // Current price — yellow dashed
+      if (currentPrice != null) {{
+        const xPx = xScale.getPixelForValue(currentPrice);
+        if (xPx >= xScale.left && xPx <= xScale.right) {{
+          ctx.beginPath();
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = "rgba(250,204,21,0.7)";
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(xPx, chart.chartArea.top);
+          ctx.lineTo(xPx, chart.chartArea.bottom);
+          ctx.stroke();
+        }}
+      }}
+      // Max Pain — violet dashed (where price gravitates at expiry)
+      if (maxPain != null) {{
+        const mpPx = xScale.getPixelForValue(maxPain);
+        if (mpPx >= xScale.left && mpPx <= xScale.right) {{
+          ctx.beginPath();
+          ctx.setLineDash([3, 4]);
+          ctx.strokeStyle = "rgba(167,139,250,0.85)";
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(mpPx, chart.chartArea.top);
+          ctx.lineTo(mpPx, chart.chartArea.bottom);
+          ctx.stroke();
+        }}
+      }}
       ctx.restore();
     }}
   }};
@@ -1835,10 +1904,10 @@ function sharedXRange(strikesA, strikesB) {{
   return {{ min: all[0] - gL * 0.6, max: all[all.length-1] + gR * 0.6 }};
 }}
 
-function buildOIChartConfig(strikes, byStrike, currentPrice, xRange=null) {{
+function buildOIChartConfig(strikes, byStrike, currentPrice, xRange=null, maxPain=null) {{
   return {{
     type: "bar",
-    plugins: _makeBarPlugins("priceLineOI", strikes, currentPrice, xRange),
+    plugins: _makeBarPlugins("priceLineOI", strikes, currentPrice, xRange, maxPain),
     data: {{
       datasets: [
         {{
@@ -1905,6 +1974,8 @@ function buildOIChartConfig(strikes, byStrike, currentPrice, xRange=null) {{
                       `${{d.putSig  ? ` | ${{d.putSig}}`  : ""}}</div>`;
             if (currentPrice != null)
               html += `<div style="margin-top:4px;color:#facc15">Current price: $${{currentPrice}}</div>`;
+            if (maxPain != null)
+              html += `<div style="color:#a78bfa">Max Pain: $${{maxPain}}</div>`;
             el.innerHTML = html;
 
             const rect  = chart.canvas.getBoundingClientRect();
@@ -2384,6 +2455,7 @@ function initOICharts(tickerStr, tickerData) {{
     const hData = tickerData.horizons?.[h];
     const contracts = (hData?.contracts ?? []).filter(c => c && (c.open_interest ?? 0) > 0);
     if (contracts.length === 0) return;
+    const maxPain = hData?.max_pain ?? null;
 
     // Rank strikes by combined (call+put) OI so both sides are always shown.
     // Group all contracts by strike first, then pick top 10 strikes by total OI.
@@ -2409,8 +2481,8 @@ function initOICharts(tickerStr, tickerData) {{
     const byStrike = {{}};
     strikes.forEach(k => {{ byStrike[k] = allByStrikeOI[k]; }});
 
-    const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice));
-    canvas._barChartData = {{ strikes, byStrike, currentPrice, type: "oi" }};
+    const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice, null, maxPain));
+    canvas._barChartData = {{ strikes, byStrike, currentPrice, maxPain, type: "oi" }};
     oiCharts[tickerStr].push(chart);
     canvas.addEventListener("mouseleave", () => {{
       const el = document.getElementById("oi-ext-tooltip");
@@ -2451,8 +2523,8 @@ function initOICharts(tickerStr, tickerData) {{
         const xr = sharedXRange(strikes, volStrikes);
         // Rebuild OI chart with shared range
         oiCharts[tickerStr].pop()?.destroy?.();  // remove last-added (OI chart)
-        oiCharts[tickerStr].push(new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice, xr)));
-        canvas._barChartData = {{ strikes, byStrike, currentPrice, type: "oi", sharedXRange: xr }};
+        oiCharts[tickerStr].push(new Chart(canvas.getContext("2d"), buildOIChartConfig(strikes, byStrike, currentPrice, xr, maxPain)));
+        canvas._barChartData = {{ strikes, byStrike, currentPrice, maxPain, type: "oi", sharedXRange: xr }};
 
         const volChart = new Chart(volCanvas.getContext("2d"), buildVolChartConfig(volStrikes, byStrikeVol, currentPrice, xr));
         volCanvas._barChartData = {{ strikes: volStrikes, byStrike: byStrikeVol, currentPrice, type: "vol", sharedXRange: xr }};
@@ -2486,6 +2558,7 @@ function initOICharts(tickerStr, tickerData) {{
   iwEntries.forEach(entry => {{
     const safeId   = tickerStr.replace(/[^A-Za-z0-9]/g, "-");
     const safeIwId = `${{safeId}}-iw-${{entry.expiry.replace(/[^0-9]/g, "")}}`;
+    const iwMaxPain = entry.max_pain ?? null;
 
     const contracts = (entry.contracts ?? []).filter(c => c && (c.open_interest ?? 0) > 0);
 
@@ -2511,8 +2584,8 @@ function initOICharts(tickerStr, tickerData) {{
     if (contracts.length > 0) {{
       const canvas = document.getElementById(`oi-chart-${{safeIwId}}`);
       if (canvas) {{
-        const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(iwStrikes, iwByStrike, currentPrice, iwXr));
-        canvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, type: "oi", sharedXRange: iwXr }};
+        const chart = new Chart(canvas.getContext("2d"), buildOIChartConfig(iwStrikes, iwByStrike, currentPrice, iwXr, iwMaxPain));
+        canvas._barChartData = {{ strikes: iwStrikes, byStrike: iwByStrike, currentPrice, maxPain: iwMaxPain, type: "oi", sharedXRange: iwXr }};
         oiCharts[tickerStr].push(chart);
         canvas.addEventListener("mouseleave", () => {{
           const el = document.getElementById("oi-ext-tooltip");
@@ -2807,7 +2880,7 @@ function openBarModal(oiCanvasId, volCanvasId, label) {{
 
   // OI chart
   if (oiD?.strikes?.length) {{
-    const cfg = buildOIChartConfig(oiD.strikes, oiD.byStrike, oiD.currentPrice, modalXr);
+    const cfg = buildOIChartConfig(oiD.strikes, oiD.byStrike, oiD.currentPrice, modalXr, oiD.maxPain ?? null);
     _applyModalOverrides(cfg);
     _barModalChartOI = new Chart(document.getElementById("bar-modal-canvas-oi").getContext("2d"), cfg);
   }}
