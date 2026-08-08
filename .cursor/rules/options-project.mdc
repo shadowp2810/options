@@ -1,0 +1,93 @@
+---
+description: Options Open Interest Dashboard — project context, architecture, and conventions
+alwaysApply: true
+---
+
+# Options Open Interest Dashboard
+
+Live at [options.pranavp.dev](https://options.pranavp.dev). Runs every weekday at 4:30 PM ET via GitHub Actions, fetches options chain data for ~130 US tech stocks, and publishes an interactive HTML dashboard to GitHub Pages.
+
+## Module Map
+
+| File | Role |
+|---|---|
+| `main.py` | Entry point — orchestrates fetch → analyze → export, writes Excel + HTML, manages JSON snapshots |
+| `universe.py` | Ticker lists: `SP500_IT`, `NASDAQ_100` (active), `INDIA_FNO` (defined but excluded — needs broker API) |
+| `fetcher.py` | yfinance wrapper: price, 1D/5D price history, earnings date, company info. Calls NASDAQ API first, falls back to yfinance for options chain |
+| `nasdaq_fetcher.py` | NASDAQ public API (`api.nasdaq.com/api/quote/{ticker}/option-chain`) — free, no key, returns all expiries × all strikes with accurate OI + bid/ask. Uses `requests`, NOT yfinance/curl_cffi |
+| `analyzer.py` | All signal logic: classify BUY/SELL/HEDGE-C/HEDGE-P, compute Max Pain, PCR, Implied Move, OI trends, signal flips, intra-week expiries |
+| `exporter_html.py` | Generates self-contained ~3000-line HTML dashboard (Chart.js from CDN, all data embedded as JSON) |
+
+## The 8 Horizons
+
+```python
+HORIZONS = {"fri": None, "7d": 7, "30d": 30, "45d": 45, "60d": 60, "90d": 90, "180d": 180, "1y": 365}
+```
+
+- `"fri"` → next Friday that hasn't expired (special case, not a day count)
+- `"30d"`–`"90d"` → OI trend compared vs 7-day-old snapshot (`prev_data_weekly`)
+- `"fri"`/`"7d"` → OI trend compared vs yesterday's snapshot (`prev_data`)
+- `"180d"`/`"1y"` → suppressed (totals shown only, no trend %)
+
+## Signal Taxonomy
+
+| Signal | Condition |
+|---|---|
+| `BUY` | OTM Call (strike ≥ price) |
+| `SELL` | OTM Put (strike ≤ price) |
+| `HEDGE-C` | ITM Call (strike < price) |
+| `HEDGE-P` | ITM Put (strike > price) |
+
+OI Trend combo signals: Build-Up, Unwinding, Bullish, Bearish, Hedged Rally, Short Covering.
+Threshold: ≥5% AND ≥500 contracts absolute change.
+
+## Key Data Structures
+
+**`fetch_results`** (output of `fetch_all`):
+```python
+{ticker: {"price": float, "earnings_date": str|None, "company_info": dict,
+          "price_history": {"price_1d_pct": float, "price_5d_pct": float},
+          "expirations": [str], "chains": {expiry_str: pd.DataFrame}}}
+```
+
+**`analyzed`** (output of `analyze_all`):
+```python
+[{"ticker": str, "price": float, "horizons": {horizon_key: {
+    "expiry": str, "contracts": [top 10 contract dicts],
+    "total_call_oi": int, "total_put_oi": int,
+    "max_pain": float, "pcr": float, "implied_move_pct": float,
+    "call_oi_trend": str, "put_oi_trend": str, "combo_signal": str
+}}, "intraweek": [...], "expiry_history": {...}}]
+```
+
+## Snapshot Files (in `reports/`)
+
+| File | Updated | Purpose |
+|---|---|---|
+| `latest_analysis.json` | Every trading day | OI delta for Fri/7D horizons (daily comparison) |
+| `weekly_analysis.json` | Every 7 days | OI delta for 30D–90D horizons (weekly comparison) |
+| `strike_history.json` | Every run | Rolling 7-day per-strike OI history (OI Momentum chart) |
+
+Max snapshot ages: daily=3 days, weekly min=5 days / max=30 days.
+
+## CI / GitHub Actions
+
+- Workflow: `.github/workflows/daily_report.yml`
+- Schedule: `30 21 * * 1-5` (9:30 PM UTC = 4:30 PM ET)
+- `fetch-depth: 2` — needed for same-day re-run snapshot restore (HEAD~1)
+- Same-day guard: if today's report is already committed, restores snapshots from HEAD~1 before running so OI deltas compare against yesterday, not today
+- pip cache key = hash of `requirements.txt` — changing requirements.txt busts the cache
+
+## Dependency Policy
+
+**Never use `>=` without an upper bound for major dependencies.** Pin to exact versions or use `~=` (compatible release). The pip cache on GitHub Actions will serve old wheels indefinitely when the requirements hash doesn't change.
+
+Known fragile dependency: `yfinance` — it uses `curl_cffi` internally. yfinance 1.5.1 + curl_cffi 0.16.0 breaks. Always pin to a tested yfinance version.
+
+## Key Design Notes
+
+- NASDAQ API uses `requests` directly (not yfinance), so it's unaffected by yfinance/Yahoo auth changes
+- `fast_info.last_price` in yfinance 1.x triggers a full `history(period="1y")` call internally — much heavier than 0.2.x
+- `exporter_html.py` uses one giant f-string; `{{` and `}}` are escaped braces for the JS template
+- `json.dumps(..., default=str)` serializes all analyzed data — safe for openpyxl/pandas types
+- India (`INDIA_FNO`) is defined in `universe.py` but excluded from `get_universe()` — yfinance doesn't support NSE options chains
