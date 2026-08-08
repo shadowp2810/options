@@ -282,7 +282,7 @@ def write_summary_sheet(ws, analyzed: list[dict]):
             contracts = h_data.get("contracts", [])
             start_col = fixed_cols + 1 + h_idx * cols_per_horizon
 
-            for rank_idx, contract in enumerate(contracts):
+            for rank_idx, contract in enumerate(contracts[:TOP_N]):
                 base_col = start_col + rank_idx * N_FIELDS
                 strike   = contract.get("strike")
                 opt_type = contract.get("type")

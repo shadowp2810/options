@@ -283,6 +283,9 @@ def top_contracts(
     # Sort by individual OI descending so rank rows (top-3) are correct.
     results.sort(key=lambda x: x.get("open_interest") or 0, reverse=True)
 
+    # Cap at n — each strike has call+put so results can exceed n
+    results = results[:n]
+
     # Pad with N/A entries if fewer than n contracts with volume
     while len(results) < n:
         results.append({
