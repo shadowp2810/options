@@ -50,8 +50,16 @@ _RANK_FILLS_3 = [
 # Extend to 50 ranks — ranks 4+ use the lightest shade
 RANK_FILLS = _RANK_FILLS_3 + [_RANK_FILLS_3[-1]] * 47
 
-WHITE_FONT   = Font(color="FFFFFF", bold=True)
-BOLD_FONT    = Font(bold=True)
+WHITE_FONT        = Font(color="FFFFFF", bold=True)
+BOLD_FONT         = Font(bold=True)
+GREEN_FONT        = Font(color="375623", bold=True)
+GREEN_FONT_NOBOLD = Font(color="375623")
+RED_FONT          = Font(color="9C0006", bold=True)
+RED_FONT_NOBOLD   = Font(color="9C0006")
+ORANGE_FONT       = Font(color="833C00", bold=True)
+EARNINGS_FONT     = Font(color="7D5700", bold=True)
+FLIP_FILL         = PatternFill("solid", fgColor="E2EFDA")
+RANK1_FILLS = [GREEN_FILL, YELLOW_FILL, PatternFill("solid", fgColor="FCE4D6")]
 CENTER       = Alignment(horizontal="center", vertical="center", wrap_text=True)
 LEFT         = Alignment(horizontal="left", vertical="center")
 
@@ -117,8 +125,6 @@ def write_detail_sheet(ws, rows: list[dict]):
 
     ws.row_dimensions[1].height = 30
 
-    ORANGE_FONT = Font(color="833C00", bold=True)
-
     for r, row in enumerate(rows, 2):
         values = [
             row["Ticker"], row["Current Price"], row["Earnings Date"],
@@ -136,10 +142,10 @@ def write_detail_sheet(ws, rows: list[dict]):
             if col_name in ("Signal", "Prev Signal"):
                 if val == "BUY":
                     cell.fill = GREEN_FILL
-                    cell.font = Font(color="375623", bold=True)
+                    cell.font = GREEN_FONT
                 elif val == "SELL":
                     cell.fill = RED_FILL
-                    cell.font = Font(color="9C0006", bold=True)
+                    cell.font = RED_FONT
                 elif val in ("HEDGE-C", "HEDGE-P"):
                     cell.fill = ORANGE_FILL
                     cell.font = ORANGE_FONT
@@ -158,21 +164,20 @@ def write_detail_sheet(ws, rows: list[dict]):
                 cell.number_format = '"$"#,##0.00'
                 if val > 0:
                     cell.fill = GREEN_FILL
-                    cell.font = Font(color="375623")
+                    cell.font = GREEN_FONT_NOBOLD
                 elif val < 0:
                     cell.fill = RED_FILL
-                    cell.font = Font(color="9C0006")
+                    cell.font = RED_FONT_NOBOLD
             elif col_name in ("Open Interest", "Volume") and val is not None:
                 cell.number_format = '#,##0'
             elif col_name == "Rank":
-                fills = [GREEN_FILL, YELLOW_FILL, PatternFill("solid", fgColor="FCE4D6")]
-                cell.fill = fills[int(val) - 1] if val and 1 <= int(val) <= 3 else GREY_FILL
+                cell.fill = RANK1_FILLS[int(val) - 1] if val and 1 <= int(val) <= 3 else GREY_FILL
             elif col_name == "⚠️ Earnings" and val == "YES":
                 cell.fill = YELLOW_FILL
-                cell.font = Font(color="7D5700", bold=True)
+                cell.font = EARNINGS_FONT
             elif col_name == "Signal Flipped" and val == "YES":
-                cell.fill = PatternFill("solid", fgColor="E2EFDA")
-                cell.font = Font(color="375623", bold=True)
+                cell.fill = FLIP_FILL
+                cell.font = GREEN_FONT
 
     widths = [10, 13, 13, 9, 6, 12, 10, 10, 8, 10, 8, 11, 12, 10, 12, 14]
     for col, w in enumerate(widths, 1):
@@ -307,13 +312,13 @@ def write_summary_sheet(ws, analyzed: list[dict]):
                 c.alignment = CENTER; c.border = THIN_BORDER
                 if signal == "BUY":
                     c.fill = GREEN_FILL
-                    c.font = Font(color="375623", bold=True)
+                    c.font = GREEN_FONT
                 elif signal == "SELL":
                     c.fill = RED_FILL
-                    c.font = Font(color="9C0006", bold=True)
+                    c.font = RED_FONT
                 elif signal in ("HEDGE-C", "HEDGE-P"):
                     c.fill = ORANGE_FILL
-                    c.font = Font(color="833C00", bold=True)
+                    c.font = ORANGE_FONT
                 else:
                     c.fill = GREY_FILL
 
@@ -324,10 +329,10 @@ def write_summary_sheet(ws, analyzed: list[dict]):
                     c.number_format = '0.00"%"'
                     if forecast > 0:
                         c.fill = GREEN_FILL
-                        c.font = Font(color="375623")
+                        c.font = GREEN_FONT_NOBOLD
                     elif forecast < 0:
                         c.fill = RED_FILL
-                        c.font = Font(color="9C0006")
+                        c.font = RED_FONT_NOBOLD
                     else:
                         c.fill = YELLOW_FILL
                 else:
